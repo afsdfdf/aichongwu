@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getModelOption, MODEL_OPTIONS } from "@/lib/catalog";
 import { requireAdminSession } from "@/lib/auth";
 import {
   deletePromptRecord,
@@ -64,57 +65,33 @@ export async function saveStoreSettingAction(
     shopDomain: getDefaultShopDomain(),
     activeModel: String(formData.get("activeModel") || "gpt-image-1"),
     requireGeneration: formData.get("requireGeneration") === "on",
-    widgetAccentColor: String(formData.get("widgetAccentColor") || "#0ea5e9"),
+    widgetAccentColor: String(formData.get("widgetAccentColor") || "#2563eb"),
     widgetButtonText: String(formData.get("widgetButtonText") || "生成效果图"),
   });
 
-  await saveProviderConfigs([
-    {
-      key: "gpt-image-1",
-      label: "OpenAI GPT Image 1",
-      apiKey: String(formData.get("openaiApiKey") || ""),
-      keepExistingApiKey: !String(formData.get("openaiApiKey") || "").trim(),
-      baseUrl: String(formData.get("openaiBaseUrl") || "").trim() || null,
-      isEnabled: true,
-    },
-    {
-      key: "flux-webhook",
-      label: "Flux (Webhook)",
-      apiKey: String(formData.get("fluxApiKey") || ""),
-      keepExistingApiKey: !String(formData.get("fluxApiKey") || "").trim(),
-      webhookUrl: String(formData.get("fluxWebhookUrl") || "").trim() || null,
-      isEnabled: true,
-    },
-    {
-      key: "stable-diffusion-webhook",
-      label: "Stable Diffusion (Webhook)",
-      apiKey: String(formData.get("sdApiKey") || ""),
-      keepExistingApiKey: !String(formData.get("sdApiKey") || "").trim(),
-      webhookUrl: String(formData.get("sdWebhookUrl") || "").trim() || null,
-      isEnabled: true,
-    },
-    {
-      key: "midjourney-webhook",
-      label: "Midjourney (Webhook)",
-      apiKey: String(formData.get("midjourneyApiKey") || ""),
-      keepExistingApiKey: !String(formData.get("midjourneyApiKey") || "").trim(),
-      webhookUrl: String(formData.get("midjourneyWebhookUrl") || "").trim() || null,
-      isEnabled: true,
-    },
-    {
-      key: "custom-webhook",
-      label: "Custom Model (Webhook)",
-      apiKey: String(formData.get("customApiKey") || ""),
-      keepExistingApiKey: !String(formData.get("customApiKey") || "").trim(),
-      webhookUrl: String(formData.get("customWebhookUrl") || "").trim() || null,
-      isEnabled: true,
-    },
-  ]);
+  await saveProviderConfigs(
+    MODEL_OPTIONS.map((option) => {
+      const field = option.formKey;
+      const savedEndpoint = String(formData.get(`${field}__endpoint`) || "").trim();
+      const savedBaseUrl = String(formData.get(`${field}__base_url`) || "").trim();
+      const apiKey = String(formData.get(`${field}__api_key`) || "");
+
+      return {
+        key: option.key,
+        label: option.label,
+        apiKey,
+        keepExistingApiKey: !apiKey.trim(),
+        webhookUrl: savedEndpoint || option.defaultEndpoint || null,
+        baseUrl: savedBaseUrl || null,
+        isEnabled: true,
+      };
+    }),
+  );
 
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/install");
-  return { ok: true, message: "设置和模型密钥已保存。" };
+  return { ok: true, message: "设置、模型端点与 API Key 已保存。" };
 }
 
 export async function importBucketAssetsAction(
@@ -149,4 +126,9 @@ export async function syncHistoryAction(): Promise<ActionState> {
     ok: true,
     message: `历史同步完成：扫描到 ${result.totalHistoricalPairs} 对原图/效果图，当前后台共 ${result.totalGenerations} 条记录。`,
   };
+}
+
+export async function getProviderOptionAction(modelKey: string) {
+  await requireAdminSession();
+  return getModelOption(modelKey);
 }

@@ -43,3 +43,5 @@ next-env.d.ts
 .vercel
 
 .next-dev.log
+
+.next-dev-3001.log

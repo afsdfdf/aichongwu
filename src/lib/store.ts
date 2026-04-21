@@ -6,7 +6,7 @@ import {
   NoSuchKey,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import { DEFAULT_PROMPTS, MODEL_OPTIONS } from "@/lib/catalog";
+import { DEFAULT_PROMPTS, getModelOption, MODEL_OPTIONS } from "@/lib/catalog";
 import {
   buildObjectUrl,
   getS3Bucket,
@@ -246,7 +246,7 @@ function ensureDefaultProviders(existing: ProviderSecretRecord[]) {
     key: item.key,
     label: item.label,
     apiKeyEncrypted: null,
-    webhookUrl: null,
+    webhookUrl: item.defaultEndpoint || null,
     baseUrl: null,
     isEnabled: true,
     createdAt: now,
@@ -321,6 +321,7 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
     state.settings.find((item) => item.shopDomain === shopDomain),
   );
   const providers = ensureDefaultProviders(state.providers).map((item) => ({
+    option: getModelOption(item.key),
     key: item.key,
     label: item.label,
     webhookUrl: item.webhookUrl,
@@ -471,6 +472,7 @@ export async function getProviderConfigs() {
   const state = await readStateFromS3();
   return ensureDefaultProviders(state.providers).map((item) => ({
     ...item,
+    option: getModelOption(item.key),
     apiKey: decryptSecret(item.apiKeyEncrypted),
     hasApiKey: Boolean(item.apiKeyEncrypted),
   }));

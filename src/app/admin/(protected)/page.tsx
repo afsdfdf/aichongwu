@@ -39,11 +39,11 @@ export default async function AdminDashboardPage() {
         <RecentActivityPanel
           rows={dashboard.recent}
           title="最近生成"
-          description="快速检查最新顾客提交、模型选择和图片输出是否正常。"
+          description="快速查看最新顾客提交、模型选择和效果图输出情况。"
         />
         <RecentActivityPanel
           rows={dashboard.recentOrders}
-          title="最近已下单记录"
+          title="最近订单记录"
           description="这些记录已经和 Shopify 订单绑定，可直接用于客服追踪与售后定位。"
         />
       </div>

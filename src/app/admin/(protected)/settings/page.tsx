@@ -15,9 +15,10 @@ export default async function SettingsPage() {
     <>
       <div className="admin-panel p-8">
         <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Storage & Model Router</p>
-        <h1 className="mt-4 text-4xl font-semibold text-slate-900">S3 存储与模型路由</h1>
+        <h1 className="mt-4 text-4xl font-semibold text-slate-900">统一模型配置中心</h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-          当前方案使用 S3 存储图片、配置与生成记录。这里可以独立管理模型选择、API Key、Webhook 与历史资源导入。
+          这里集中管理 API 端点、模型 Key、店铺按钮样式、S3 资源与生图测试。你可以用预设模板快速接入，
+          也可以填写自定义 API。
         </p>
       </div>
 
@@ -46,7 +47,7 @@ export default async function SettingsPage() {
       <div className="admin-panel p-6">
         <h2 className="text-2xl font-semibold text-slate-900">最近导入的 S3 资源</h2>
         <p className="mt-2 text-sm leading-7 text-slate-500">
-          这部分是从你现有 AWS bucket 导入的资源索引，方便后续在网站上复用已有图片与历史内容。
+          这里展示你从 bucket 导入的资源，方便后续直接挂到网站前台或作为历史图库使用。
         </p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -81,9 +82,14 @@ export default async function SettingsPage() {
       <div className="grid gap-4">
         {MODEL_OPTIONS.map((model) => (
           <article key={model.key} className="admin-panel p-5">
-            <h2 className="text-lg font-semibold text-slate-900">{model.label}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">{model.label}</h2>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
+                {model.provider}
+              </span>
+            </div>
             <p className="mt-2 text-sm leading-7 text-slate-500">{model.description}</p>
-            <p className="mt-3 text-xs text-slate-400">model key: {model.key}</p>
+            <p className="mt-3 text-xs text-slate-400">端点：{model.defaultEndpoint || "自定义填写"}</p>
           </article>
         ))}
       </div>

@@ -1,84 +1,279 @@
 import OpenAI from "openai";
-import { MODEL_OPTIONS } from "@/lib/catalog";
+import { getModelOption, type ModelAdapter } from "@/lib/catalog";
 import { fetchRemoteFileAsBuffer, uploadBufferToS3 } from "@/lib/s3";
 import { getProviderConfigByKey } from "@/lib/store";
 
 type GenerateInput = {
   modelKey: string;
   prompt: string;
-  sourceImageBuffer: Buffer;
-  sourceImageContentType: string;
-  sourceImageUrl: string;
-  productType: string;
+  sourceImageBuffer?: Buffer;
+  sourceImageContentType?: string;
+  sourceImageUrl?: string;
+  productType?: string;
 };
 
-function getModelConfig(modelKey: string) {
-  const model = MODEL_OPTIONS.find((item) => item.key === modelKey);
-  if (!model) {
+type ProviderImageResult = {
+  outputBuffer?: Buffer;
+  contentType?: string;
+  imageUrl?: string;
+  metadata?: Record<string, unknown> | null;
+};
+
+async function resolveProvider(modelKey: string) {
+  const option = getModelOption(modelKey);
+  if (!option) {
     throw new Error(`Unknown model: ${modelKey}`);
   }
-  return model;
+
+  const provider = await getProviderConfigByKey(modelKey);
+  return {
+    option,
+    provider,
+    endpointUrl: provider?.webhookUrl || option.defaultEndpoint || "",
+    apiKey: provider?.apiKey || null,
+    baseUrl: provider?.baseUrl || undefined,
+  };
 }
 
-async function generateWithOpenAI(input: GenerateInput) {
-  const provider = await getProviderConfigByKey("gpt-image-1");
-  const apiKey = provider?.apiKey || process.env.OPENAI_API_KEY;
-  const baseURL = provider?.baseUrl || undefined;
-
-  if (!apiKey) {
+async function normalizeRemoteImage(result: ProviderImageResult) {
+  if (result.outputBuffer && result.contentType) {
     return {
-      outputBuffer: input.sourceImageBuffer,
-      contentType: input.sourceImageContentType,
+      outputBuffer: result.outputBuffer,
+      contentType: result.contentType,
+      metadata: result.metadata ?? null,
+    };
+  }
+
+  if (result.imageUrl) {
+    const remote = await fetchRemoteFileAsBuffer(result.imageUrl);
+    return {
+      outputBuffer: remote.buffer,
+      contentType: remote.contentType,
       metadata: {
-        mode: "mock",
-        reason: "OpenAI API Key is not configured yet, returned original image as demo output",
+        ...(result.metadata ?? {}),
+        remoteImageUrl: result.imageUrl,
       },
     };
   }
 
-  const client = new OpenAI({ apiKey, baseURL });
-  const file = new File([new Uint8Array(input.sourceImageBuffer)], "source.png", {
-    type: input.sourceImageContentType,
-  });
+  throw new Error("Provider did not return an image");
+}
 
-  const result = await client.images.edit({
+async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, baseURL?: string) {
+  const client = new OpenAI({ apiKey, baseURL });
+
+  if (input.sourceImageBuffer && input.sourceImageContentType) {
+    const file = new File([new Uint8Array(input.sourceImageBuffer)], "source.png", {
+      type: input.sourceImageContentType,
+    });
+
+    const result = await client.images.edit({
+      model: "gpt-image-1",
+      image: file,
+      prompt: input.prompt,
+      size: "1024x1024",
+    });
+
+    const image = result.data?.[0];
+    if (!image) throw new Error("OpenAI returned no image");
+
+    return normalizeRemoteImage({
+      outputBuffer: image.b64_json ? Buffer.from(image.b64_json, "base64") : undefined,
+      contentType: image.b64_json ? "image/png" : undefined,
+      imageUrl: image.url,
+      metadata: {
+        revisedPrompt: image.revised_prompt ?? null,
+      },
+    });
+  }
+
+  const result = await client.images.generate({
     model: "gpt-image-1",
-    image: file,
     prompt: input.prompt,
     size: "1024x1024",
   });
 
   const image = result.data?.[0];
-  if (!image) {
-    throw new Error("OpenAI returned no image");
-  }
+  if (!image) throw new Error("OpenAI returned no image");
 
-  if (image.b64_json) {
-    return {
-      outputBuffer: Buffer.from(image.b64_json, "base64"),
-      contentType: "image/png",
-      metadata: {
-        revisedPrompt: image.revised_prompt ?? null,
-      },
-    };
-  }
-
-  if (image.url) {
-    const remote = await fetchRemoteFileAsBuffer(image.url);
-    return {
-      outputBuffer: remote.buffer,
-      contentType: remote.contentType,
-      metadata: {
-        revisedPrompt: image.revised_prompt ?? null,
-      },
-    };
-  }
-
-  throw new Error("OpenAI image payload format unsupported");
+  return normalizeRemoteImage({
+    outputBuffer: image.b64_json ? Buffer.from(image.b64_json, "base64") : undefined,
+    contentType: image.b64_json ? "image/png" : undefined,
+    imageUrl: image.url,
+    metadata: {
+      revisedPrompt: image.revised_prompt ?? null,
+    },
+  });
 }
 
-async function generateWithWebhook(input: GenerateInput, webhookUrl: string, apiKey?: string | null) {
-  const response = await fetch(webhookUrl, {
+async function generateWithOpenAIImages(input: GenerateInput, modelName: string, apiKey: string, baseURL?: string) {
+  const client = new OpenAI({ apiKey, baseURL });
+  const result = await client.images.generate({
+    model: modelName as "dall-e-3",
+    prompt: input.prompt,
+    size: "1024x1024",
+  });
+  const image = result.data?.[0];
+  if (!image) throw new Error("OpenAI returned no image");
+  return normalizeRemoteImage({
+    outputBuffer: image.b64_json ? Buffer.from(image.b64_json, "base64") : undefined,
+    contentType: image.b64_json ? "image/png" : undefined,
+    imageUrl: image.url,
+    metadata: {
+      revisedPrompt: image.revised_prompt ?? null,
+    },
+  });
+}
+
+async function generateWithStability(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  const response = await fetch(endpointUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text_prompts: [{ text: input.prompt }],
+      cfg_scale: 7,
+      height: 1024,
+      width: 1024,
+      samples: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Stability request failed: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    artifacts?: Array<{ base64?: string; seed?: number; finishReason?: string }>;
+  };
+  const artifact = payload.artifacts?.[0];
+  if (!artifact?.base64) {
+    throw new Error("Stability did not return base64 image data");
+  }
+
+  return {
+    outputBuffer: Buffer.from(artifact.base64, "base64"),
+    contentType: "image/png",
+    metadata: {
+      seed: artifact.seed ?? null,
+      finishReason: artifact.finishReason ?? null,
+    },
+  };
+}
+
+async function pollReplicate(getUrl: string, apiKey: string) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const response = await fetch(getUrl, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    const payload = (await response.json()) as {
+      status?: string;
+      output?: string | string[];
+      error?: string;
+    };
+
+    if (payload.status === "succeeded") {
+      const output = Array.isArray(payload.output) ? payload.output[0] : payload.output;
+      if (!output) throw new Error("Replicate succeeded but returned no output");
+      return output;
+    }
+
+    if (payload.status === "failed" || payload.status === "canceled") {
+      throw new Error(payload.error || `Replicate status: ${payload.status}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  throw new Error("Replicate polling timed out");
+}
+
+async function generateWithReplicate(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  const response = await fetch(endpointUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input: {
+        prompt: input.prompt,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Replicate request failed: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    output?: string | string[];
+    urls?: { get?: string };
+  };
+
+  const immediateOutput = Array.isArray(payload.output) ? payload.output[0] : payload.output;
+  const imageUrl = immediateOutput || (payload.urls?.get ? await pollReplicate(payload.urls.get, apiKey) : null);
+  if (!imageUrl) throw new Error("Replicate did not return image output");
+
+  return normalizeRemoteImage({
+    imageUrl,
+    metadata: {
+      provider: "replicate",
+    },
+  });
+}
+
+async function generateWithGemini(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  const url = `${endpointUrl}${endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: input.prompt }],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini request failed: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{
+          inlineData?: { data?: string; mimeType?: string };
+        }>;
+      };
+    }>;
+  };
+
+  const inlineData = payload.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+  if (!inlineData?.data) {
+    throw new Error("Gemini did not return inline image data");
+  }
+
+  return {
+    outputBuffer: Buffer.from(inlineData.data, "base64"),
+    contentType: inlineData.mimeType || "image/png",
+    metadata: {
+      provider: "gemini",
+    },
+  };
+}
+
+async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
+  const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -86,14 +281,14 @@ async function generateWithWebhook(input: GenerateInput, webhookUrl: string, api
     },
     body: JSON.stringify({
       prompt: input.prompt,
-      sourceImageUrl: input.sourceImageUrl,
-      productType: input.productType,
+      sourceImageUrl: input.sourceImageUrl || null,
+      productType: input.productType || null,
       modelKey: input.modelKey,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Webhook model failed: ${response.status}`);
+    throw new Error(`Custom API request failed: ${response.status}`);
   }
 
   const payload = (await response.json()) as {
@@ -111,35 +306,51 @@ async function generateWithWebhook(input: GenerateInput, webhookUrl: string, api
     };
   }
 
-  if (payload.imageUrl) {
-    const remote = await fetchRemoteFileAsBuffer(payload.imageUrl);
-    return {
-      outputBuffer: remote.buffer,
-      contentType: remote.contentType,
-      metadata: payload.metadata ?? null,
-    };
-  }
+  return normalizeRemoteImage({
+    imageUrl: payload.imageUrl,
+    metadata: payload.metadata ?? null,
+  });
+}
 
-  throw new Error("Webhook did not return imageUrl or imageBase64");
+function ensureConfigured(value: string | null | undefined, label: string) {
+  if (!value) {
+    throw new Error(`${label} 未配置`);
+  }
+  return value;
+}
+
+async function runProviderImageGeneration(input: GenerateInput) {
+  const { option, endpointUrl, apiKey, baseUrl } = await resolveProvider(input.modelKey);
+
+  switch (option.adapter as ModelAdapter) {
+    case "openai-edit":
+      return generateWithOpenAIEdit(input, ensureConfigured(apiKey, "OpenAI API Key"), baseUrl);
+    case "openai-images":
+      return generateWithOpenAIImages(
+        input,
+        option.modelName,
+        ensureConfigured(apiKey, "OpenAI API Key"),
+        baseUrl,
+      );
+    case "stability":
+      return generateWithStability(input, ensureConfigured(endpointUrl, "Stability 端点"), ensureConfigured(apiKey, "Stability API Key"));
+    case "replicate":
+      return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate 端点"), ensureConfigured(apiKey, "Replicate API Token"));
+    case "gemini":
+      return generateWithGemini(input, ensureConfigured(endpointUrl, "Gemini 端点"), ensureConfigured(apiKey, "Google API Key"));
+    case "custom":
+      return generateWithCustom(input, ensureConfigured(endpointUrl, "自定义 API 端点"), apiKey);
+    case "midjourney-async":
+    case "dashscope-async":
+    case "xfyun-async":
+      throw new Error(`${option.label} 多数为异步任务型接口，当前支持配置校验，不支持即时生图测试。`);
+    default:
+      throw new Error(`Unsupported adapter: ${option.adapter}`);
+  }
 }
 
 export async function generatePreviewImage(input: GenerateInput) {
-  const model = getModelConfig(input.modelKey);
-  const provider = await getProviderConfigByKey(input.modelKey);
-
-  const generated =
-    model.adapter === "openai-edit"
-      ? await generateWithOpenAI(input)
-      : await generateWithWebhook(
-          input,
-          provider?.webhookUrl || process.env[model.webhookEnv!] || "",
-          provider?.apiKey || null,
-        );
-
-  if (model.adapter === "webhook" && !provider?.webhookUrl && !process.env[model.webhookEnv!]) {
-    throw new Error(`Webhook URL is not configured for ${input.modelKey}`);
-  }
-
+  const generated = await runProviderImageGeneration(input);
   const uploaded = await uploadBufferToS3({
     buffer: generated.outputBuffer,
     folder: "generated",
@@ -149,5 +360,43 @@ export async function generatePreviewImage(input: GenerateInput) {
   return {
     outputImageUrl: uploaded.url,
     metadata: generated.metadata ?? null,
+  };
+}
+
+export async function generateTestImage(params: { modelKey: string; prompt: string }) {
+  const generated = await runProviderImageGeneration({
+    modelKey: params.modelKey,
+    prompt: params.prompt,
+  });
+
+  const uploaded = await uploadBufferToS3({
+    buffer: generated.outputBuffer,
+    folder: "tests",
+    contentType: generated.contentType,
+  });
+
+  return {
+    outputImageUrl: uploaded.url,
+    metadata: generated.metadata ?? null,
+  };
+}
+
+export async function validateProviderSetup(modelKey: string) {
+  const { option, endpointUrl, apiKey, baseUrl } = await resolveProvider(modelKey);
+  return {
+    ok: Boolean(
+      option.adapter === "custom"
+        ? endpointUrl
+        : option.adapter === "gemini"
+          ? endpointUrl && apiKey
+          : option.adapter.startsWith("openai")
+            ? apiKey
+            : endpointUrl,
+    ),
+    message: `${option.label} 配置已读取`,
+    option,
+    endpointUrl,
+    hasApiKey: Boolean(apiKey),
+    baseUrl: baseUrl || null,
   };
 }
