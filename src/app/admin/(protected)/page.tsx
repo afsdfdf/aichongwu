@@ -30,21 +30,15 @@ export default async function AdminDashboardPage() {
 
       <TrendPanel summary={dashboard.summary} trend={dashboard.trend} />
 
-      <BreakdownPanels
-        productBreakdown={dashboard.productBreakdown}
-        modelBreakdown={dashboard.modelBreakdown}
-      />
-
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <RecentActivityPanel
-          rows={dashboard.recent}
+          rows={dashboard.recent.slice(0, 6)}
           title="最近生成"
-          description="快速查看最新顾客提交、模型选择和效果图输出情况。"
+          description="横向一行快速查看最新效果图。"
         />
-        <RecentActivityPanel
-          rows={dashboard.recentOrders}
-          title="最近订单记录"
-          description="这些记录已经和 Shopify 订单绑定，可直接用于客服追踪与售后定位。"
+        <BreakdownPanels
+          productBreakdown={dashboard.productBreakdown}
+          modelBreakdown={dashboard.modelBreakdown}
         />
       </div>
     </>

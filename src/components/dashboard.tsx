@@ -1,18 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import {
-  ArrowRight,
-  Box,
-  ChartNoAxesColumn,
-  CircleDashed,
-  Clock3,
-  Cpu,
-  Images,
-  ShoppingBag,
-  Sparkles,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { ArrowRight, Box, Clock3, Cpu, Images, ShoppingBag, Users } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 
 type BreakdownItem = {
@@ -65,66 +53,36 @@ export function DashboardHero({
   conversionRate: number;
 }) {
   return (
-    <section className="admin-panel p-8 lg:p-10">
-      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+    <section className="admin-panel p-6">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr] xl:items-center">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] uppercase tracking-[0.24em] text-slate-500">
             Merchant Intelligence
           </div>
-          <h1 className="mt-5 max-w-4xl text-4xl font-semibold leading-tight text-slate-900 md:text-5xl">
-            Shopify AI 商品效果图后台
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-500">
+          <h1 className="mt-4 text-3xl font-semibold text-slate-900">Shopify AI 商品效果图后台</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
             当前店铺 <span className="font-medium text-slate-900">{shopDomain}</span> 正在使用{" "}
-            <span className="font-medium text-slate-900">{activeModel}</span> 处理生成任务。你可以在这里查看转化率、
-            生成趋势、商品分布和最近订单记录。
+            <span className="font-medium text-slate-900">{activeModel}</span> 处理生成任务，当前转化率为{" "}
+            <span className="font-medium text-slate-900">{conversionRate}%</span>。
           </p>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/admin/generations"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-            >
-              查看生成记录 <ArrowRight className="size-4" />
-            </Link>
-            <Link
-              href="/admin/install"
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
-            >
-              打开 Shopify 安装页
-            </Link>
-          </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SpotlightCard icon={Sparkles} label="下单转化率" value={`${conversionRate}%`} meta="按已生成记录计算" />
-          <SpotlightCard icon={Cpu} label="当前默认模型" value={activeModel} meta="后台可随时切换" />
-          <SpotlightCard icon={ChartNoAxesColumn} label="订单链路" value="Webhook Ready" meta="订单自动回写关联" />
-          <SpotlightCard icon={Images} label="媒体留存" value="S3 Archive" meta="原图与效果图长期可查" />
+        <div className="flex flex-wrap gap-3 xl:justify-end">
+          <Link
+            href="/admin/generations"
+            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+          >
+            查看生成记录 <ArrowRight className="size-4" />
+          </Link>
+          <Link
+            href="/admin/preview"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
+          >
+            打开功能预览
+          </Link>
         </div>
       </div>
     </section>
-  );
-}
-
-function SpotlightCard({
-  icon: Icon,
-  label,
-  value,
-  meta,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  meta: string;
-}) {
-  return (
-    <article className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-      <Icon className="size-5 text-slate-700" />
-      <p className="mt-5 text-sm text-slate-500">{label}</p>
-      <h2 className="mt-2 text-2xl font-semibold text-slate-900">{value}</h2>
-      <p className="mt-2 text-xs text-slate-400">{meta}</p>
-    </article>
   );
 }
 
@@ -145,21 +103,21 @@ export function KpiGrid({
   ];
 
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
       {items.map((item) => {
         const Icon = item.icon;
         return (
-          <article key={item.label} className="admin-panel p-6">
+          <article key={item.label} className="admin-panel p-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-500">{item.label}</p>
-                <h3 className="mt-3 text-4xl font-semibold text-slate-900">{item.value}</h3>
+                <p className="text-xs text-slate-500">{item.label}</p>
+                <h3 className="mt-2 text-3xl font-semibold text-slate-900">{item.value}</h3>
               </div>
-              <div className="rounded-2xl bg-slate-100 p-3">
-                <Icon className="size-5 text-slate-700" />
+              <div className="rounded-xl bg-slate-100 p-2.5">
+                <Icon className="size-4 text-slate-700" />
               </div>
             </div>
-            <p className="mt-4 text-sm text-slate-500">{item.meta}</p>
+            <p className="mt-3 text-xs text-slate-500">{item.meta}</p>
           </article>
         );
       })}
@@ -177,12 +135,12 @@ export function TrendPanel({
   const max = Math.max(...trend.map((item) => item.value), 1);
 
   return (
-    <section className="admin-panel p-6 lg:p-7">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <section className="admin-panel p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.25em] text-slate-400">7-Day Trend</p>
-          <h2 className="mt-3 text-2xl font-semibold text-slate-900">最近 7 天生成趋势</h2>
-          <p className="mt-2 max-w-xl text-sm leading-7 text-slate-500">
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">最近 7 天生成趋势</h2>
+          <p className="mt-1 text-sm text-slate-500">
             平均每日 {summary.averageDaily} 次生成，环比上周{" "}
             <span className={cn("font-medium", summary.weekOverWeek >= 0 ? "text-emerald-600" : "text-rose-600")}>
               {summary.weekOverWeek >= 0 ? "+" : ""}
@@ -191,67 +149,32 @@ export function TrendPanel({
             。
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          提示：观察生成量和订单回写是否同步增长。
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+          当前待转化：{summary.pendingCount}
         </div>
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_280px]">
-        <div className="grid h-[280px] grid-cols-7 items-end gap-3">
-          {trend.map((point) => {
-            const height = `${Math.max(18, Math.round((point.value / max) * 100))}%`;
-            return (
-              <div key={point.label} className="flex h-full flex-col items-center justify-end gap-3">
-                <div className="text-xs text-slate-400">{point.value}</div>
-                <div className="relative flex h-full w-full items-end justify-center rounded-full bg-slate-100 p-1">
-                  <div className="w-full rounded-full bg-[linear-gradient(180deg,#60a5fa_0%,#2563eb_100%)]" style={{ height }} />
-                  <div
-                    className="absolute bottom-1 left-1 right-1 rounded-full bg-emerald-400"
-                    style={{
-                      height: point.value ? `${Math.max(4, Math.round((point.ordered / point.value) * 100))}%` : "0%",
-                    }}
-                  />
-                </div>
-                <div className="text-xs text-slate-500">{point.label}</div>
+      <div className="mt-6 grid h-[190px] grid-cols-7 items-end gap-3">
+        {trend.map((point) => {
+          const height = `${Math.max(12, Math.round((point.value / max) * 100))}%`;
+          return (
+            <div key={point.label} className="flex h-full flex-col items-center justify-end gap-2">
+              <div className="text-[11px] text-slate-400">{point.value}</div>
+              <div className="relative flex h-full w-full items-end justify-center rounded-md bg-slate-100 p-1">
+                <div className="w-full rounded-sm bg-[linear-gradient(180deg,#60a5fa_0%,#2563eb_100%)]" style={{ height }} />
+                <div
+                  className="absolute bottom-1 left-1 right-1 rounded-sm bg-emerald-400"
+                  style={{
+                    height: point.value ? `${Math.max(4, Math.round((point.ordered / point.value) * 100))}%` : "0%",
+                  }}
+                />
               </div>
-            );
-          })}
-        </div>
-
-        <div className="space-y-4">
-          <InsightTile icon={TrendingUp} title="趋势变化" value={`${summary.weekOverWeek >= 0 ? "+" : ""}${summary.weekOverWeek}%`} description="对比前 7 天的生成变化" />
-          <InsightTile icon={CircleDashed} title="待转化" value={`${summary.pendingCount}`} description="尚未形成订单的生成记录" />
-          <InsightTile icon={ShoppingBag} title="已回写订单" value={`${summary.orderedCount}`} description="已绑定 Shopify 订单号" />
-        </div>
+              <div className="text-[11px] text-slate-500">{point.label}</div>
+            </div>
+          );
+        })}
       </div>
     </section>
-  );
-}
-
-function InsightTile({
-  icon: Icon,
-  title,
-  value,
-  description,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <article className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl bg-white p-3">
-          <Icon className="size-4 text-slate-700" />
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <h3 className="mt-1 text-2xl font-semibold text-slate-900">{value}</h3>
-        </div>
-      </div>
-      <p className="mt-4 text-sm text-slate-500">{description}</p>
-    </article>
   );
 }
 
@@ -264,8 +187,8 @@ export function BreakdownPanels({
 }) {
   return (
     <section className="grid gap-5 xl:grid-cols-2">
-      <BreakdownCard title="商品类型分布" description="看哪些 SKU 的 AI 预览需求更高，方便优化商品页与 Prompt。" items={productBreakdown} />
-      <BreakdownCard title="模型使用分布" description="比较当前默认模型与历史记录的分布情况。" items={modelBreakdown} />
+      <BreakdownCard title="商品类型分布" description="查看哪些商品类型的 AI 预览需求更高。" items={productBreakdown} />
+      <BreakdownCard title="模型使用分布" description="对比当前默认模型与历史记录的分布情况。" items={modelBreakdown} />
     </section>
   );
 }
@@ -280,17 +203,14 @@ function BreakdownCard({
   items: BreakdownItem[];
 }) {
   return (
-    <article className="admin-panel p-6">
-      <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm leading-7 text-slate-500">{description}</p>
-
-      <div className="mt-6 space-y-4">
+    <article className="admin-panel p-5">
+      <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+      <p className="mt-1 text-sm text-slate-500">{description}</p>
+      <div className="mt-4 space-y-3">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
-            暂无数据，先完成几次生成后这里会自动出现分布分析。
-          </div>
+          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">暂无数据。</div>
         ) : (
-          items.map((item) => (
+          items.slice(0, 5).map((item) => (
             <div key={item.label} className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -320,36 +240,30 @@ export function RecentActivityPanel({
   description: string;
 }) {
   return (
-    <article className="admin-panel p-6">
-      <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm leading-7 text-slate-500">{description}</p>
+    <article className="admin-panel p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        <Link href="/admin/generations" className="text-sm text-sky-600">
+          查看全部
+        </Link>
+      </div>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">暂无记录。</div>
         ) : (
           rows.map((item) => (
-            <div key={item.id} className="grid gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[76px_1fr_auto]">
-              <img src={item.outputImageUrl} alt={item.productType} className="aspect-square h-[76px] w-[76px] rounded-2xl object-cover" />
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusPill status={item.orderId ? "ordered" : item.status} />
-                  <span className="rounded-full bg-white px-3 py-1 text-xs text-slate-500">{item.modelUsed}</span>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs text-slate-500">{item.productType}</span>
-                </div>
-                <h3 className="mt-3 text-base font-medium text-slate-900">{item.productTitle || item.productType}</h3>
-                <p className="mt-1 text-sm text-slate-500">{item.customerEmail || "未记录邮箱"} · {formatDate(item.createdAt)}</p>
+            <div key={item.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3">
+              <img src={item.outputImageUrl} alt={item.productType} className="aspect-square w-full rounded-2xl object-cover" />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusPill status={item.orderId ? "ordered" : item.status} />
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-500">{item.modelUsed}</span>
               </div>
-              <div className="flex flex-col items-start gap-2 lg:items-end">
-                {item.orderName ? (
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-600">{item.orderName}</span>
-                ) : (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">未下单</span>
-                )}
-                <a href={item.outputImageUrl} target="_blank" rel="noreferrer" className="text-sm text-sky-600">
-                  打开效果图
-                </a>
-              </div>
+              <h3 className="mt-3 line-clamp-1 text-sm font-medium text-slate-900">{item.productTitle || item.productType}</h3>
+              <p className="mt-1 line-clamp-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
             </div>
           ))
         )}

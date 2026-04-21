@@ -44,7 +44,9 @@ export type ProviderSecretRecord = {
   apiKeyEncrypted: string | null;
   webhookUrl: string | null;
   baseUrl: string | null;
+  modelName: string | null;
   isEnabled: boolean;
+  priority: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -248,7 +250,9 @@ function ensureDefaultProviders(existing: ProviderSecretRecord[]) {
     apiKeyEncrypted: null,
     webhookUrl: item.defaultEndpoint || null,
     baseUrl: null,
+    modelName: item.modelName,
     isEnabled: true,
+    priority: MODEL_OPTIONS.findIndex((option) => option.key === item.key) + 1,
     createdAt: now,
     updatedAt: now,
   }));
@@ -326,7 +330,9 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
     label: item.label,
     webhookUrl: item.webhookUrl,
     baseUrl: item.baseUrl,
+    modelName: item.modelName || getModelOption(item.key)?.modelName || "",
     isEnabled: item.isEnabled,
+    priority: item.priority,
     hasApiKey: Boolean(item.apiKeyEncrypted),
   }));
   const importedAssets = state.importedAssets.sort((a, b) => b.importedAt.localeCompare(a.importedAt));
@@ -434,7 +440,9 @@ export async function saveProviderConfigs(
     keepExistingApiKey?: boolean;
     webhookUrl?: string | null;
     baseUrl?: string | null;
+    modelName?: string | null;
     isEnabled?: boolean;
+    priority?: number;
   }>,
 ) {
   await mutateState((state) => {
@@ -456,7 +464,9 @@ export async function saveProviderConfigs(
         apiKeyEncrypted: nextApiKey,
         webhookUrl: update.webhookUrl === undefined ? provider.webhookUrl : update.webhookUrl,
         baseUrl: update.baseUrl === undefined ? provider.baseUrl : update.baseUrl,
+        modelName: update.modelName === undefined ? provider.modelName : update.modelName,
         isEnabled: update.isEnabled ?? provider.isEnabled,
+        priority: update.priority ?? provider.priority,
         updatedAt: now,
       };
     });
@@ -475,7 +485,7 @@ export async function getProviderConfigs() {
     option: getModelOption(item.key),
     apiKey: decryptSecret(item.apiKeyEncrypted),
     hasApiKey: Boolean(item.apiKeyEncrypted),
-  }));
+  })).sort((a, b) => a.priority - b.priority);
 }
 
 export async function getProviderConfigByKey(key: string) {

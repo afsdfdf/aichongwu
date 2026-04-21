@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, ImageIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from "lucide-react";
 import { StatusPill } from "@/components/dashboard";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -29,6 +29,8 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"result" | "source">("result");
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -43,14 +45,66 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
     [rows, selectedId],
   );
 
+  const allSelectedOnPage = pagedRows.length > 0 && pagedRows.every((item) => selectedIds.includes(item.id));
+
+  async function downloadSelected() {
+    if (!selectedIds.length) return;
+    setDownloading(true);
+    const response = await fetch("/api/generations/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selectedIds, includeOriginals: true }),
+    });
+
+    if (!response.ok) {
+      setDownloading(false);
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "generations-batch.zip";
+    link.click();
+    URL.revokeObjectURL(url);
+    setDownloading(false);
+  }
+
   return (
     <>
-      <div className="flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-        <span>
-          每页显示 <span className="font-medium text-slate-900">{PAGE_SIZE}</span> 条，当前第{" "}
-          <span className="font-medium text-slate-900">{currentPage}</span> / {totalPages} 页
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+        <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={allSelectedOnPage}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  setSelectedIds((prev) => [...new Set([...prev, ...pagedRows.map((item) => item.id)])]);
+                } else {
+                  setSelectedIds((prev) => prev.filter((id) => !pagedRows.some((item) => item.id === id)));
+                }
+              }}
+            />
+            <span>全选本页</span>
+          </label>
+          <span>
+            每页显示 <span className="font-medium text-slate-900">{PAGE_SIZE}</span> 条，当前第{" "}
+            <span className="font-medium text-slate-900">{currentPage}</span> / {totalPages} 页
+          </span>
+        </div>
+
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadSelected}
+            disabled={!selectedIds.length || downloading}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Download className="size-4" />
+            {downloading ? "打包中..." : `下载选中 (${selectedIds.length})`}
+          </button>
           <PageButton disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
             <ChevronLeft className="size-4" />
           </PageButton>
@@ -64,41 +118,56 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
-        {pagedRows.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => {
-              setSelectedId(item.id);
-              setActiveTab("result");
-            }}
-            className="overflow-hidden rounded-[18px] border border-[#dbe3ef] bg-white text-left shadow-[0_6px_20px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
-          >
-            <div className="flex items-center justify-between px-3 pb-2 pt-3">
-              <span className="flex size-4 items-center justify-center rounded-[5px] border border-slate-300 bg-white" />
-              <span className="text-[11px] text-slate-400">{formatDate(item.createdAt)}</span>
-            </div>
-
-            <div className="bg-[#f8fafc] px-2 pb-2">
-              <img
-                src={item.outputImageUrl}
-                alt={item.productTitle || item.productType}
-                className="aspect-square w-full rounded-[14px] object-cover"
-              />
-            </div>
-
-            <div className="space-y-2 px-3 pb-3 pt-1">
-              <div className="flex items-center justify-between gap-2">
-                <p className="line-clamp-1 text-xs font-medium text-slate-700">
-                  {item.productTitle || item.productType}
-                </p>
-                <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
-                  有原图
-                </span>
+        {pagedRows.map((item) => {
+          const checked = selectedIds.includes(item.id);
+          return (
+            <div
+              key={item.id}
+              className="overflow-hidden rounded-[18px] border border-[#dbe3ef] bg-white text-left shadow-[0_6px_20px_rgba(15,23,42,0.05)]"
+            >
+              <div className="flex items-center justify-between px-3 pb-2 pt-3">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => {
+                    setSelectedIds((prev) =>
+                      event.target.checked ? [...new Set([...prev, item.id])] : prev.filter((id) => id !== item.id),
+                    );
+                  }}
+                />
+                <span className="text-[11px] text-slate-400">{formatDate(item.createdAt)}</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedId(item.id);
+                  setActiveTab("result");
+                }}
+                className="block w-full"
+              >
+                <div className="bg-[#f8fafc] px-2 pb-2">
+                  <img
+                    src={item.outputImageUrl}
+                    alt={item.productTitle || item.productType}
+                    className="aspect-square w-full rounded-[14px] object-cover"
+                  />
+                </div>
+
+                <div className="space-y-2 px-3 pb-3 pt-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="line-clamp-1 text-xs font-medium text-slate-700">
+                      {item.productTitle || item.productType}
+                    </p>
+                    <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                      有原图
+                    </span>
+                  </div>
+                </div>
+              </button>
             </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
 
       <div className="flex items-center justify-center gap-2">
@@ -198,16 +267,6 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                   <p className="text-sm text-slate-500">提示词</p>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-200">
                     {selected.promptUsed}
-                  </p>
-                </div>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="size-4 text-sky-300" />
-                    <p className="text-sm text-slate-300">查看逻辑</p>
-                  </div>
-                  <p className="mt-2 text-sm leading-7 text-slate-400">
-                    记录页默认显示生成后的效果图，只在需要时查看原图，这样更接近你要的历史图库浏览体验。
                   </p>
                 </div>
               </div>

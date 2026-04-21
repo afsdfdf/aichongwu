@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Eye,
   ImageIcon,
   LayoutDashboard,
   LogOut,
@@ -36,6 +37,12 @@ const items = [
     label: "模型与存储",
     description: "S3、API Key、Webhook",
     icon: PlugZap,
+  },
+  {
+    href: "/admin/preview",
+    label: "功能预览",
+    description: "店铺按钮、生成流程、测试展示",
+    icon: Eye,
   },
   {
     href: "/admin/install",

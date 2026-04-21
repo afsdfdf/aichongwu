@@ -51,13 +51,13 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03)_0%,rgba(255,255,255,0.02)_100%)] p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <div className="admin-panel p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-sky-300/70">Generations Gallery</p>
-            <h1 className="mt-4 text-4xl font-semibold text-white">效果图画廊</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">
-              默认显示生成后的效果图，保留“查看原图”入口。浏览体验尽量接近你给的历史图库风格，但接口已改为你的当前 S3 / Shopify 流程。
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Generations Gallery</p>
+            <h1 className="mt-2 text-3xl font-semibold text-slate-900">效果图画廊</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+              默认显示效果图，支持查看原图、批量勾选下载与历史记录同步。
             </p>
           </div>
 
@@ -69,9 +69,9 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      <div className="rounded-[28px] border border-[#dbe3ef] bg-[#f8fafc] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
-        <form>
-          <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr_0.7fr_0.7fr_auto]">
+      <div className="admin-panel p-4">
+        <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr_0.7fr_0.7fr_auto_auto]">
+          <form className="contents">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -125,16 +125,15 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
               <SlidersHorizontal className="size-4" />
               筛选
             </button>
+          </form>
+          <div className="xl:col-span-1 xl:justify-self-end">
+            <HistorySyncForm />
           </div>
-        </form>
-
-        <div className="mt-4">
-          <HistorySyncForm />
         </div>
       </div>
 
       {filteredRows.length === 0 ? (
-        <div className="glass rounded-[28px] p-6 text-sm text-slate-400">没有匹配的记录。</div>
+        <div className="admin-panel p-6 text-sm text-slate-500">没有匹配的记录。</div>
       ) : (
         <GenerationGallery rows={filteredRows} />
       )}
@@ -144,9 +143,9 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+    <article className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
       <p className="text-sm text-slate-500">{label}</p>
-      <h2 className="mt-2 text-3xl font-semibold text-white">{value}</h2>
+      <h2 className="mt-1 text-2xl font-semibold text-slate-900">{value}</h2>
     </article>
   );
 }

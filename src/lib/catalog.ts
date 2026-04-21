@@ -210,3 +210,36 @@ export const DEFAULT_PROMPTS = [
 export function getModelOption(key: string) {
   return MODEL_OPTIONS.find((item) => item.key === key) ?? null;
 }
+
+export function detectModelsFromEndpoint(endpoint: string) {
+  const value = endpoint.trim().toLowerCase();
+  if (!value) return [];
+
+  return MODEL_OPTIONS.filter((item) => {
+    const candidate = (item.defaultEndpoint || "").toLowerCase();
+    if (!candidate) return false;
+
+    if (value.includes("api.openai.com")) {
+      return item.provider === "OpenAI";
+    }
+    if (value.includes("api.stability.ai")) {
+      return item.provider === "Stability AI";
+    }
+    if (value.includes("api.replicate.com")) {
+      return item.provider === "Replicate";
+    }
+    if (value.includes("generativelanguage.googleapis.com")) {
+      return item.provider === "Google";
+    }
+    if (value.includes("api.mjapi.com")) {
+      return item.provider === "Midjourney";
+    }
+    if (value.includes("dashscope.aliyuncs.com")) {
+      return item.provider === "DashScope";
+    }
+    if (value.includes("spark-api.xf-yun.com")) {
+      return item.provider === "Seedream / Spark API";
+    }
+    return candidate.includes(value) || value.includes(candidate.replace(/^https?:\/\//, ""));
+  });
+}

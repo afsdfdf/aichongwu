@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getModelOption, MODEL_OPTIONS } from "@/lib/catalog";
+import { detectModelsFromEndpoint, getModelOption } from "@/lib/catalog";
 import { requireAdminSession } from "@/lib/auth";
 import {
   deletePromptRecord,
+  getStoreContext,
   importExistingBucketAssets,
   savePromptRecord,
   saveProviderConfigs,
@@ -61,37 +62,58 @@ export async function saveStoreSettingAction(
 ): Promise<ActionState> {
   await requireAdminSession();
 
+  const { setting } = await getStoreContext(getDefaultShopDomain());
+
+  const activeModel = String(formData.get("activeModel") || setting.activeModel || "gpt-image-1");
+  const option = getModelOption(activeModel);
+  if (!option) {
+    return { ok: false, message: "未找到对应模型。" };
+  }
+
+  const nextButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "生成效果图");
+  const nextAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
+
   await saveStoreSettingRecord({
     shopDomain: getDefaultShopDomain(),
-    activeModel: String(formData.get("activeModel") || "gpt-image-1"),
-    requireGeneration: formData.get("requireGeneration") === "on",
-    widgetAccentColor: String(formData.get("widgetAccentColor") || "#2563eb"),
-    widgetButtonText: String(formData.get("widgetButtonText") || "生成效果图"),
+    activeModel,
+    requireGeneration: setting.requireGeneration,
+    widgetAccentColor: nextAccentColor,
+    widgetButtonText: nextButtonText,
   });
 
-  await saveProviderConfigs(
-    MODEL_OPTIONS.map((option) => {
-      const field = option.formKey;
-      const savedEndpoint = String(formData.get(`${field}__endpoint`) || "").trim();
-      const savedBaseUrl = String(formData.get(`${field}__base_url`) || "").trim();
-      const apiKey = String(formData.get(`${field}__api_key`) || "");
+  const endpoint =
+    String(formData.get("endpointUrl") || formData.get(`${option.formKey}__endpoint`) || "").trim();
+  const apiKey = String(formData.get("apiKey") || formData.get(`${option.formKey}__api_key`) || "");
+  const baseUrl = String(formData.get("baseUrl") || formData.get(`${option.formKey}__base_url`) || "").trim();
+  const modelName =
+    String(formData.get("modelName") || formData.get(`${option.formKey}__model_name`) || "").trim();
+  const priority = Math.max(1, Number(formData.get(`${option.formKey}__priority`) || 1));
+  const isEnabled = formData.get(`${option.formKey}__enabled`) === "on";
 
-      return {
-        key: option.key,
-        label: option.label,
-        apiKey,
-        keepExistingApiKey: !apiKey.trim(),
-        webhookUrl: savedEndpoint || option.defaultEndpoint || null,
-        baseUrl: savedBaseUrl || null,
-        isEnabled: true,
-      };
-    }),
-  );
+  const compatible = detectModelsFromEndpoint(endpoint);
+  const compatibleHint =
+    compatible.length > 0
+      ? `已识别 ${compatible.length} 个兼容模型。`
+      : "当前端点未识别到常见模型，将按你手动选择的模型配置保存。";
+
+  await saveProviderConfigs([
+    {
+      key: option.key,
+      label: option.label,
+      apiKey,
+      keepExistingApiKey: !apiKey.trim(),
+      webhookUrl: endpoint || option.defaultEndpoint || null,
+      baseUrl: baseUrl || null,
+      modelName: modelName || option.modelName,
+      priority,
+      isEnabled,
+    },
+  ]);
 
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/install");
-  return { ok: true, message: "设置、模型端点与 API Key 已保存。" };
+  return { ok: true, message: `${option.label} 配置已保存。${compatibleHint}` };
 }
 
 export async function importBucketAssetsAction(
@@ -126,9 +148,4 @@ export async function syncHistoryAction(): Promise<ActionState> {
     ok: true,
     message: `历史同步完成：扫描到 ${result.totalHistoricalPairs} 对原图/效果图，当前后台共 ${result.totalGenerations} 条记录。`,
   };
-}
-
-export async function getProviderOptionAction(modelKey: string) {
-  await requireAdminSession();
-  return getModelOption(modelKey);
 }

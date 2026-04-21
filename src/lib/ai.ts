@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { getModelOption, type ModelAdapter } from "@/lib/catalog";
 import { fetchRemoteFileAsBuffer, uploadBufferToS3 } from "@/lib/s3";
-import { getProviderConfigByKey } from "@/lib/store";
+import { getProviderConfigByKey, getProviderConfigs } from "@/lib/store";
 
 type GenerateInput = {
   modelKey: string;
@@ -32,6 +32,7 @@ async function resolveProvider(modelKey: string) {
     endpointUrl: provider?.webhookUrl || option.defaultEndpoint || "",
     apiKey: provider?.apiKey || null,
     baseUrl: provider?.baseUrl || undefined,
+    modelName: provider?.modelName || option.modelName,
   };
 }
 
@@ -273,6 +274,7 @@ async function generateWithGemini(input: GenerateInput, endpointUrl: string, api
 }
 
 async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
+  const provider = await getProviderConfigByKey(input.modelKey);
   const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
@@ -284,6 +286,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       sourceImageUrl: input.sourceImageUrl || null,
       productType: input.productType || null,
       modelKey: input.modelKey,
+      modelName: provider?.modelName || input.modelKey,
     }),
   });
 
@@ -320,7 +323,7 @@ function ensureConfigured(value: string | null | undefined, label: string) {
 }
 
 async function runProviderImageGeneration(input: GenerateInput) {
-  const { option, endpointUrl, apiKey, baseUrl } = await resolveProvider(input.modelKey);
+  const { option, endpointUrl, apiKey, baseUrl, modelName } = await resolveProvider(input.modelKey);
 
   switch (option.adapter as ModelAdapter) {
     case "openai-edit":
@@ -328,7 +331,7 @@ async function runProviderImageGeneration(input: GenerateInput) {
     case "openai-images":
       return generateWithOpenAIImages(
         input,
-        option.modelName,
+        modelName,
         ensureConfigured(apiKey, "OpenAI API Key"),
         baseUrl,
       );
@@ -350,7 +353,46 @@ async function runProviderImageGeneration(input: GenerateInput) {
 }
 
 export async function generatePreviewImage(input: GenerateInput) {
-  const generated = await runProviderImageGeneration(input);
+  const primaryKey = input.modelKey;
+  const configuredProviders = await getProviderConfigs();
+  const fallbackKeys = configuredProviders
+    .filter(
+      (provider) =>
+        provider.key !== primaryKey &&
+        provider.isEnabled &&
+        provider.hasApiKey &&
+        provider.option?.supportsPreviewGeneration,
+    )
+    .map((provider) => provider.key);
+
+  const attemptKeys = [primaryKey, ...fallbackKeys];
+  let lastError: Error | null = null;
+  let generated:
+    | {
+        outputBuffer: Buffer;
+        contentType: string;
+        metadata: Record<string, unknown> | null;
+      }
+    | null = null;
+  let usedModelKey = primaryKey;
+
+  for (const modelKey of attemptKeys) {
+    try {
+      generated = await runProviderImageGeneration({
+        ...input,
+        modelKey,
+      });
+      usedModelKey = modelKey;
+      break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Unknown provider error");
+    }
+  }
+
+  if (!generated) {
+    throw lastError ?? new Error("All configured models failed");
+  }
+
   const uploaded = await uploadBufferToS3({
     buffer: generated.outputBuffer,
     folder: "generated",
@@ -359,7 +401,11 @@ export async function generatePreviewImage(input: GenerateInput) {
 
   return {
     outputImageUrl: uploaded.url,
-    metadata: generated.metadata ?? null,
+    metadata: {
+      ...(generated.metadata ?? {}),
+      usedModelKey,
+      fallbackUsed: usedModelKey !== primaryKey,
+    },
   };
 }
 
