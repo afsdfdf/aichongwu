@@ -275,19 +275,32 @@ async function generateWithGemini(input: GenerateInput, endpointUrl: string, api
 
 async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
   const provider = await getProviderConfigByKey(input.modelKey);
+  const modelName = provider?.modelName || input.modelKey;
+  const isOpenAICompatibleImagesApi =
+    endpointUrl.includes("/v1/images/generations") || endpointUrl.includes("/images/generations");
+
+  const requestBody = isOpenAICompatibleImagesApi
+    ? {
+        model: modelName,
+        prompt: input.prompt,
+        n: 1,
+        size: "1024x1024",
+      }
+    : {
+        prompt: input.prompt,
+        sourceImageUrl: input.sourceImageUrl || null,
+        productType: input.productType || null,
+        modelKey: input.modelKey,
+        modelName,
+      };
+
   const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
-    body: JSON.stringify({
-      prompt: input.prompt,
-      sourceImageUrl: input.sourceImageUrl || null,
-      productType: input.productType || null,
-      modelKey: input.modelKey,
-      modelName: provider?.modelName || input.modelKey,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -295,11 +308,41 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   }
 
   const payload = (await response.json()) as {
+    created?: number;
+    data?: Array<{
+      url?: string;
+      b64_json?: string;
+      revised_prompt?: string;
+    }>;
     imageUrl?: string;
     imageBase64?: string;
     mimeType?: string;
     metadata?: Record<string, unknown>;
   };
+
+  const openAIStyleImage = payload.data?.[0];
+  if (openAIStyleImage?.b64_json) {
+    return {
+      outputBuffer: Buffer.from(openAIStyleImage.b64_json, "base64"),
+      contentType: "image/png",
+      metadata: {
+        ...(payload.metadata ?? {}),
+        revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+        provider: "custom-openai-compatible",
+      },
+    };
+  }
+
+  if (openAIStyleImage?.url) {
+    return normalizeRemoteImage({
+      imageUrl: openAIStyleImage.url,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+        provider: "custom-openai-compatible",
+      },
+    });
+  }
 
   if (payload.imageBase64) {
     return {

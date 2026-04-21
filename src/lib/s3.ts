@@ -68,7 +68,6 @@ export async function uploadBufferToS3(params: {
       Key: key,
       Body: params.buffer,
       ContentType: params.contentType,
-      ACL: "public-read",
     }),
   );
 
