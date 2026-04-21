@@ -1,0 +1,15 @@
+{%- comment -%}
+AI Preview Widget Snippet
+粘贴到 Shopify 商品模板中即可
+{%- endcomment -%}
+
+<div
+  id="ai-preview-root"
+  data-api-base="https://your-vercel-app.vercel.app"
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-product-title="{{ product.title | escape }}"
+  data-product-type="{{ product.type | default: product.handle | escape }}"
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+></div>
+<script src="https://your-vercel-app.vercel.app/widget.js" defer></script>
