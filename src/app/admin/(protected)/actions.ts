@@ -8,6 +8,7 @@ import {
   savePromptRecord,
   saveProviderConfigs,
   saveStoreSettingRecord,
+  syncHistoricalGenerationsFromBucket,
 } from "@/lib/store";
 import { getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
 
@@ -135,5 +136,17 @@ export async function importBucketAssetsAction(
   return {
     ok: true,
     message: `已从 S3 导入 ${imported.length} 个对象${prefix ? `（prefix: ${prefix}）` : ""}。`,
+  };
+}
+
+export async function syncHistoryAction(): Promise<ActionState> {
+  await requireAdminSession();
+  const result = await syncHistoricalGenerationsFromBucket(getDefaultShopDomain());
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/generations");
+  return {
+    ok: true,
+    message: `历史同步完成：扫描到 ${result.totalHistoricalPairs} 对原图/效果图，当前后台共 ${result.totalGenerations} 条记录。`,
   };
 }

@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
-import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  ListObjectsV2Command,
+  NoSuchKey,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { DEFAULT_PROMPTS, MODEL_OPTIONS } from "@/lib/catalog";
 import {
   buildObjectUrl,
@@ -74,6 +79,12 @@ export type ImportedAssetRecord = {
   importedAt: string;
 };
 
+type S3ObjectLite = {
+  key: string;
+  size: number;
+  lastModified: string | null;
+};
+
 type AppState = {
   version: 2;
   prompts: PromptRecord[];
@@ -102,6 +113,11 @@ function createEmptyState(): AppState {
     importedAssets: [],
     updatedAt: nowIso(),
   };
+}
+
+function parseTimestampFromKey(key: string) {
+  const match = key.match(/\/(\d+)-/);
+  return match ? Number(match[1]) : null;
 }
 
 async function streamToString(stream: AsyncIterable<Uint8Array>) {
@@ -195,6 +211,33 @@ async function mutateState(mutator: (state: AppState) => AppState | Promise<AppS
   const nextState = await mutator(state);
   await writeStateToS3(nextState);
   return nextState;
+}
+
+async function listAllObjects(prefix: string) {
+  const client = getS3Client();
+  const items: S3ObjectLite[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: getS3Bucket(),
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    items.push(
+      ...(response.Contents ?? []).map((item) => ({
+        key: item.Key!,
+        size: item.Size ?? 0,
+        lastModified: item.LastModified?.toISOString() ?? null,
+      })),
+    );
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return items;
 }
 
 function ensureDefaultProviders(existing: ProviderSecretRecord[]) {
@@ -528,6 +571,92 @@ export async function importExistingBucketAssets(input: { prefix?: string; maxKe
   });
 
   return objects;
+}
+
+export async function syncHistoricalGenerationsFromBucket(shopDomain = getDefaultShopDomain()) {
+  const [originals, results] = await Promise.all([listAllObjects("originals/"), listAllObjects("results/")]);
+
+  const sortedOriginals = originals
+    .map((item) => ({ ...item, ts: parseTimestampFromKey(item.key) }))
+    .filter((item): item is S3ObjectLite & { ts: number } => item.ts !== null)
+    .sort((a, b) => a.ts - b.ts);
+
+  const sortedResults = results
+    .map((item) => ({ ...item, ts: parseTimestampFromKey(item.key) }))
+    .filter((item): item is S3ObjectLite & { ts: number } => item.ts !== null)
+    .sort((a, b) => a.ts - b.ts);
+
+  const matchedRecords: GenerationRecord[] = [];
+  let originalIndex = 0;
+  const dayMs = 1000 * 60 * 60 * 24;
+
+  for (const result of sortedResults) {
+    while (
+      originalIndex + 1 < sortedOriginals.length &&
+      sortedOriginals[originalIndex + 1].ts <= result.ts
+    ) {
+      originalIndex += 1;
+    }
+
+    const original = sortedOriginals[originalIndex];
+    if (!original) continue;
+    if (result.ts - original.ts > dayMs || result.ts < original.ts) continue;
+
+    const createdAt = new Date(result.ts).toISOString();
+    matchedRecords.push({
+      id: `legacy-${result.ts}-${result.key.split("/").pop()?.split(".")[0] ?? randomUUID()}`,
+      shopDomain,
+      productType: "legacy-import",
+      productTitle: "历史导入记录",
+      shopifyProductId: null,
+      shopifyVariantId: null,
+      customerEmail: null,
+      customerId: null,
+      sourceImageUrl: buildObjectUrl(original.key),
+      outputImageUrl: buildObjectUrl(result.key),
+      promptUsed: "Imported from existing S3 originals/results history",
+      modelUsed: "legacy-s3-import",
+      orderId: null,
+      orderName: null,
+      orderNumber: null,
+      status: "imported",
+      metadata: {
+        imported: true,
+        originalKey: original.key,
+        resultKey: result.key,
+        originalSize: original.size,
+        resultSize: result.size,
+        matchedBy: "timestamp-nearest-previous-original",
+        diffMs: result.ts - original.ts,
+      },
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    originalIndex += 1;
+  }
+
+  const state = await mutateState((current) => {
+    const existingByOutputUrl = new Map(current.generations.map((item) => [item.outputImageUrl, item]));
+    for (const record of matchedRecords) {
+      if (!existingByOutputUrl.has(record.outputImageUrl)) {
+        existingByOutputUrl.set(record.outputImageUrl, record);
+      }
+    }
+
+    return {
+      ...current,
+      generations: [...existingByOutputUrl.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    };
+  });
+
+  return {
+    imported: matchedRecords.filter(
+      (record) => state.generations.find((item) => item.outputImageUrl === record.outputImageUrl)?.id === record.id,
+    ).length,
+    totalHistoricalPairs: matchedRecords.length,
+    totalGenerations: state.generations.length,
+  };
 }
 
 export async function uploadJsonToS3StateFolder(fileName: string, data: unknown) {

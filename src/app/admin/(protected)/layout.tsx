@@ -9,9 +9,11 @@ export default async function ProtectedAdminLayout({
   await requireAdminSession();
 
   return (
-    <main className="container-shell grid gap-6 py-8 lg:grid-cols-[260px_1fr]">
+    <main className="admin-shell grid min-h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
       <AdminNav />
-      <section className="space-y-6">{children}</section>
+      <section className="admin-content min-w-0 px-6 py-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-[1400px] space-y-6 pb-10">{children}</div>
+      </section>
     </main>
   );
 }
