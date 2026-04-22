@@ -9,11 +9,11 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Storage & Model Router</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">统一模型配置中心</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-          选择服务商 → 填写 API Key → 配置模型。同一服务商下所有模型共享 API Key。
+      <div className="admin-panel p-6 lg:p-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-400">Storage & Model Router</p>
+        <h1 className="mt-3 text-3xl font-semibold text-slate-900 lg:text-4xl">Unified model control center</h1>
+        <p className="mt-3 max-w-4xl text-base leading-7 text-slate-500 lg:text-lg">
+          Connect a provider, save credentials, detect supported models, and choose the default production model from one readable workspace. This page is intentionally larger so the full provider configuration is easy to review.
         </p>
       </div>
 
@@ -27,3 +27,4 @@ export default async function SettingsPage() {
     </>
   );
 }
+

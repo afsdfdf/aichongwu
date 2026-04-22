@@ -11,8 +11,18 @@ import type { AppState } from "@/lib/types";
 const REDIS_KEY = "app-state";
 
 function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
+function getReadOnlyRedis() {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token =
+    process.env.KV_REST_API_READ_ONLY_TOKEN ||
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN;
   if (!url || !token) return null;
   return new Redis({ url, token });
 }
@@ -20,7 +30,7 @@ function getRedis() {
 /** Read cached state from Redis. Returns null on miss or unavailable. */
 export async function getRedisCache(): Promise<AppState | null> {
   try {
-    const redis = getRedis();
+    const redis = getReadOnlyRedis();
     if (!redis) return null;
     const raw = await redis.get<string>(REDIS_KEY);
     if (!raw) return null;

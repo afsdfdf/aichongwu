@@ -26,3 +26,8 @@ export function formatDate(date: Date | string) {
     timeStyle: "short",
   }).format(typeof date === "string" ? new Date(date) : date);
 }
+
+export function formatDateTimeISO(date: Date | string) {
+  const value = typeof date === "string" ? new Date(date) : date;
+  return value.toISOString();
+}

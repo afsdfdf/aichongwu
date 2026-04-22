@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       sourceImageUrl: sourceUpload.url,
       outputImageUrl: generated.outputImageUrl,
       promptUsed,
-      modelUsed: store.setting.activeModel,
+      modelUsed: generated.usedModelKey,
       orderId: null,
       orderName: null,
       orderNumber: null,
@@ -85,6 +85,7 @@ export async function POST(request: Request) {
       outputImageUrl: record.outputImageUrl,
       promptUsed: record.promptUsed,
       modelUsed: record.modelUsed,
+      metadata: record.metadata ?? null,
     });
   } catch (error) {
     console.error(error);

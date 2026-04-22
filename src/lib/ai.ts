@@ -20,6 +20,23 @@ type ProviderImageResult = {
   metadata?: Record<string, unknown> | null;
 };
 
+function hasSourceImage(input: GenerateInput) {
+  return Boolean(input.sourceImageBuffer && input.sourceImageContentType);
+}
+
+function sourceImageBase64(input: GenerateInput) {
+  return input.sourceImageBuffer ? input.sourceImageBuffer.toString("base64") : null;
+}
+
+function ensureImageAwareAdapter(adapter: ModelAdapter, label: string, input: GenerateInput) {
+  if (!hasSourceImage(input)) return;
+  if (adapter === "openai-edit" || adapter === "custom") return;
+
+  throw new Error(
+    `${label} is currently using a text-to-image path in this app, so the uploaded source image is not forwarded upstream. Switch to an image-edit compatible model or a custom endpoint that accepts source images.`,
+  );
+}
+
 async function resolveProvider(modelKey: string) {
   const option = getModelOption(modelKey);
   if (!option) {
@@ -90,6 +107,7 @@ async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, base
       imageUrl: image.url,
       metadata: {
         revisedPrompt: image.revised_prompt ?? null,
+        sourceImageForwarded: true,
       },
     });
   }
@@ -109,6 +127,7 @@ async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, base
     imageUrl: image.url,
     metadata: {
       revisedPrompt: image.revised_prompt ?? null,
+      sourceImageForwarded: false,
     },
   });
 }
@@ -127,6 +146,7 @@ function mapAspectRatioToSize(ar: string | undefined): string {
 }
 
 async function generateWithOpenAIImages(input: GenerateInput, modelName: string, apiKey: string, baseURL?: string) {
+  ensureImageAwareAdapter("openai-images", modelName, input);
   const client = new OpenAI({ apiKey, baseURL });
   const size = mapAspectRatioToSize(input.aspectRatio);
   const result = await client.images.generate({
@@ -142,11 +162,13 @@ async function generateWithOpenAIImages(input: GenerateInput, modelName: string,
     imageUrl: image.url,
     metadata: {
       revisedPrompt: image.revised_prompt ?? null,
+      sourceImageForwarded: false,
     },
   });
 }
 
 async function generateWithStability(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  ensureImageAwareAdapter("stability", "Stability", input);
   // v2beta endpoints use multipart/form-data, v1 endpoints use JSON
   const isV2 = endpointUrl.includes("/v2beta/");
 
@@ -240,6 +262,7 @@ async function generateWithStability(input: GenerateInput, endpointUrl: string, 
     metadata: {
       seed: artifact.seed ?? null,
       finishReason: artifact.finishReason ?? null,
+      sourceImageForwarded: false,
     },
   };
 }
@@ -278,6 +301,7 @@ async function pollReplicate(getUrl: string, apiKey: string) {
 }
 
 async function generateWithReplicate(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  ensureImageAwareAdapter("replicate", "Replicate", input);
   const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
@@ -308,11 +332,13 @@ async function generateWithReplicate(input: GenerateInput, endpointUrl: string, 
     imageUrl,
     metadata: {
       provider: "replicate",
+      sourceImageForwarded: false,
     },
   });
 }
 
 async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  ensureImageAwareAdapter("fal-queue", "fal.ai", input);
   // fal.ai uses Key prefix (not Bearer) and async queue model
   const submitUrl = endpointUrl;
 
@@ -388,6 +414,7 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
 }
 
 async function generateWithGemini(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  ensureImageAwareAdapter("gemini", "Gemini", input);
   const url = `${endpointUrl}${endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`;
   const response = await fetch(url, {
     method: "POST",
@@ -427,6 +454,7 @@ async function generateWithGemini(input: GenerateInput, endpointUrl: string, api
     contentType: inlineData.mimeType || "image/png",
     metadata: {
       provider: "gemini",
+      sourceImageForwarded: false,
     },
   };
 }
@@ -445,6 +473,7 @@ async function generateWithOpenAIChatImage(
   apiKey: string,
   baseURL?: string,
 ) {
+  ensureImageAwareAdapter("openai-chat-image", modelName, input);
   const client = new OpenAI({ apiKey, baseURL });
 
   // Build prompt with aspect ratio hint
@@ -484,6 +513,7 @@ async function generateWithOpenAIChatImage(
         provider: "openai-chat-image",
         model: result.model,
         usage: result.usage ?? null,
+        sourceImageForwarded: false,
       },
     };
   }
@@ -498,6 +528,7 @@ async function generateWithOpenAIChatImage(
         provider: "openai-chat-image",
         model: result.model,
         usage: result.usage ?? null,
+        sourceImageForwarded: false,
       },
     });
   }
@@ -511,6 +542,7 @@ async function generateWithOpenAIChatImage(
         provider: "openai-chat-image",
         model: result.model,
         usage: result.usage ?? null,
+        sourceImageForwarded: false,
       },
     });
   }
@@ -523,19 +555,112 @@ async function generateWithOpenAIChatImage(
 async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
   const provider = await getProviderConfigByKey(input.modelKey);
   const modelName = provider?.modelName || input.modelKey;
+  const sourceProvided = hasSourceImage(input);
+  const size = mapAspectRatioToSize(input.aspectRatio);
+  const isOpenAICompatibleEditsApi =
+    endpointUrl.includes("/v1/images/edits") || endpointUrl.includes("/images/edits");
   const isOpenAICompatibleImagesApi =
     endpointUrl.includes("/v1/images/generations") || endpointUrl.includes("/images/generations");
+
+  if (sourceProvided && isOpenAICompatibleEditsApi) {
+    const formData = new FormData();
+    formData.append("model", modelName);
+    formData.append("prompt", input.prompt);
+    formData.append("size", size);
+    formData.append("n", "1");
+    formData.append(
+      "image",
+      new File([new Uint8Array(input.sourceImageBuffer!)], "source.png", {
+        type: input.sourceImageContentType!,
+      }),
+    );
+
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Custom API edit request failed: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
+      imageUrl?: string;
+      imageBase64?: string;
+      mimeType?: string;
+      metadata?: Record<string, unknown>;
+    };
+
+    const openAIStyleImage = payload.data?.[0];
+    if (openAIStyleImage?.b64_json) {
+      return {
+        outputBuffer: Buffer.from(openAIStyleImage.b64_json, "base64"),
+        contentType: "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+        },
+      };
+    }
+
+    if (openAIStyleImage?.url) {
+      return normalizeRemoteImage({
+        imageUrl: openAIStyleImage.url,
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+        },
+      });
+    }
+
+    if (payload.imageBase64) {
+      return {
+        outputBuffer: Buffer.from(payload.imageBase64, "base64"),
+        contentType: payload.mimeType || "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+        },
+      };
+    }
+
+    return normalizeRemoteImage({
+      imageUrl: payload.imageUrl,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        provider: "custom-openai-compatible-edit",
+        sourceImageForwarded: true,
+      },
+    });
+  }
+
+  if (sourceProvided && isOpenAICompatibleImagesApi) {
+    throw new Error(
+      "The configured endpoint uses /images/generations, which is text-to-image only. Your uploaded image is not sent to that upstream API. Use an /images/edits endpoint or a custom JSON endpoint that accepts sourceImageUrl/sourceImageBase64.",
+    );
+  }
 
   const requestBody = isOpenAICompatibleImagesApi
     ? {
         model: modelName,
         prompt: input.prompt,
         n: 1,
-        size: "1024x1024",
+        size,
       }
     : {
         prompt: input.prompt,
         sourceImageUrl: input.sourceImageUrl || null,
+        sourceImageBase64: sourceImageBase64(input),
+        sourceImageContentType: input.sourceImageContentType || null,
         productType: input.productType || null,
         modelKey: input.modelKey,
         modelName,
@@ -576,6 +701,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
+        sourceImageForwarded: false,
       },
     };
   }
@@ -587,6 +713,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
+        sourceImageForwarded: false,
       },
     });
   }
@@ -595,13 +722,19 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     return {
       outputBuffer: Buffer.from(payload.imageBase64, "base64"),
       contentType: payload.mimeType || "image/png",
-      metadata: payload.metadata ?? null,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        sourceImageForwarded: sourceProvided,
+      },
     };
   }
 
   return normalizeRemoteImage({
     imageUrl: payload.imageUrl,
-    metadata: payload.metadata ?? null,
+    metadata: {
+      ...(payload.metadata ?? {}),
+      sourceImageForwarded: sourceProvided,
+    },
   });
 }
 
@@ -701,6 +834,7 @@ export async function generatePreviewImage(input: GenerateInput) {
 
   return {
     outputImageUrl: uploaded.url,
+    usedModelKey,
     metadata: {
       ...(generated.metadata ?? {}),
       usedModelKey,
@@ -732,6 +866,7 @@ export async function generateTestImage(params: {
 
   return {
     outputImageUrl: uploaded.url,
+    usedModelKey: params.modelKey,
     metadata: generated.metadata ?? null,
   };
 }

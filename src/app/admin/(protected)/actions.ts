@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getModelOption, getProviderById } from "@/lib/catalog";
+import { getProviderById } from "@/lib/catalog";
 import { requireAdminSession } from "@/lib/auth";
 import {
   deletePromptRecord,
@@ -12,7 +12,7 @@ import {
   saveStoreSettingRecord,
   syncHistoricalGenerationsFromBucket,
 } from "@/lib/store";
-import { getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
+import { formatDateTimeISO, getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
 
 type ActionState = { ok: boolean; message: string };
 
@@ -28,7 +28,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   const isActive = formData.get("isActive") === "on";
 
   if (!productType || !displayName || !promptTemplate) {
-    return { ok: false, message: "请完整填写产品类型、显示名和提示词。" };
+    return { ok: false, message: "请完整填写产品类型、显示名称和提示词。" };
   }
 
   await savePromptRecord({
@@ -45,7 +45,11 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   revalidatePath("/admin");
   revalidatePath("/admin/prompts");
   revalidatePath("/admin/install");
-  return { ok: true, message: "提示词已保存。" };
+
+  return {
+    ok: true,
+    message: `已保存到 ${getDefaultShopDomain()} / ${productType} / ${formatDateTimeISO(new Date())}`,
+  };
 }
 
 export async function deletePromptAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
@@ -56,7 +60,7 @@ export async function deletePromptAction(_prevState: ActionState, formData: Form
   }
   revalidatePath("/admin/prompts");
   revalidatePath("/admin");
-  return { ok: true, message: id ? "已删除。" : "" };
+  return { ok: true, message: id ? `已删除 ${id}` : "" };
 }
 
 export async function saveStoreSettingAction(
@@ -67,7 +71,6 @@ export async function saveStoreSettingAction(
 
   const { setting } = await getStoreContext(getDefaultShopDomain());
 
-  // v3: read provider-level fields
   const providerId = String(formData.get("providerId") || "").trim();
   const activeModel = String(formData.get("activeModel") || setting.activeModel || "gpt-image-1");
   const apiKey = String(formData.get("apiKey") || "");
@@ -75,7 +78,6 @@ export async function saveStoreSettingAction(
   const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
   const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "生成效果图");
 
-  // Save store setting (active model, button style)
   await saveStoreSettingRecord({
     shopDomain: getDefaultShopDomain(),
     activeModel,
@@ -84,12 +86,10 @@ export async function saveStoreSettingAction(
     widgetButtonText,
   });
 
-  // If providerId is present, save provider-level config
   if (providerId) {
     const providerDef = getProviderById(providerId);
     const label = providerDef?.label || providerId;
 
-    // Collect model-level fields from the form
     const models: Array<{
       id: string;
       modelName: string;
@@ -100,15 +100,15 @@ export async function saveStoreSettingAction(
 
     for (const [key, value] of formData.entries()) {
       const match = key.match(/^model_(.+)_modelName$/);
-      if (match) {
-        const modelId = match[1];
-        const modelName = String(value || "").trim();
-        const endpoint = String(formData.get(`model_${modelId}_endpoint`) || "").trim() || null;
-        const priority = Math.max(1, Number(formData.get(`model_${modelId}_priority`) || 1));
+      if (!match) continue;
 
-        if (modelName) {
-          models.push({ id: modelId, modelName, endpoint, isEnabled: true, priority });
-        }
+      const modelId = match[1];
+      const modelName = String(value || "").trim();
+      const endpoint = String(formData.get(`model_${modelId}_endpoint`) || "").trim() || null;
+      const priority = Math.max(1, Number(formData.get(`model_${modelId}_priority`) || 1));
+
+      if (modelName) {
+        models.push({ id: modelId, modelName, endpoint, isEnabled: true, priority });
       }
     }
 

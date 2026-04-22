@@ -7,8 +7,8 @@ export const revalidate = 5;
 function getSnippet(appUrl: string) {
   return `{%- comment -%}
 Memory Mint - Custom Upload Module (v3)
-使用方法：Shopify 后台 > 产品页模板 > Add section > Custom Liquid > 粘贴此代码
-放置位置：变体选择器（颜色）上方
+Install path: Shopify Admin > Online Store > Themes > Customize > Product template > Add section > Custom Liquid
+Recommended placement: directly above the variant / color picker
 {%- endcomment -%}
 
 <div id="ai-preview-root"
@@ -27,15 +27,16 @@ Memory Mint - Custom Upload Module (v3)
 
 function getInstallSteps() {
   return [
-    "Shopify 后台进入 Online Store > Themes > Customize。",
-    "打开目标商品模板（Product template）。",
-    "在产品信息区域点击 Add section。",
-    "添加 Custom Liquid。",
-    "把下面完整代码原样粘贴进去，不要改 Liquid 变量名。",
-    "把模块放在颜色/variant picker 上方。",
-    "保存后回到商品页，先走上传和预览，再确认设计后进入选色与下单。",
+    "Open Shopify Admin > Online Store > Themes > Customize.",
+    "Open the product template where you want the upload experience to appear.",
+    "In the product information area, click Add section.",
+    "Add a Custom Liquid block.",
+    "Paste the full code snippet below exactly as shown.",
+    "Place the block directly above the variant / color picker.",
+    "Save the template, then test: upload photo → preview design → use design → choose color → add to cart.",
   ];
 }
+
 
 export default async function InstallPage() {
   const appUrl = "https://aichongwu.vercel.app";
@@ -47,20 +48,22 @@ export default async function InstallPage() {
     <>
       <div className="admin-panel p-5 lg:p-6">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Shopify Install Guide</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">按上传模块文档安装到 Shopify</h1>
+        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">Install the upload widget on your Shopify product page</h1>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-          这一页不再是“最小改动接入”说明，而是按你给的上传模块文档来组织安装引导：位置、格式、代码块、域名配置都固定，用户只需要照着复制粘贴即可。
+          This page is the client-ready install guide. Copy the code exactly as shown, place it above the variant picker, and the upload flow will be ready with our hosted API already connected.
         </p>
       </div>
+
 
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="admin-panel p-5 lg:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Custom Liquid 完整代码</h2>
+              <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Complete Custom Liquid snippet</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                严格按文档的编辑方式放到 Product Template 的 Custom Liquid 中，推荐位置：变体选择器上方。
+                Paste this into the Product Template Custom Liquid block. Recommended placement: directly above the variant or color picker.
               </p>
+
             </div>
             <div className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500">widget.js</div>
           </div>
@@ -72,20 +75,21 @@ export default async function InstallPage() {
           <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
             <div className="flex items-center gap-2 font-medium">
               <CheckCircle2 className="size-4" />
-              代码使用规则
+              Important rules
             </div>
             <ul className="mt-3 space-y-2 leading-7 text-emerald-800">
-              <li>• 不要删掉 `id="ai-preview-root"`，这是 widget 挂载点。</li>
-              <li>• 不要删掉 `id="mm-material-url"`，这是设计确认后的隐藏字段。</li>
-              <li>• `data-api-base` 必须是我们的域名：<span className="font-medium">{appUrl}</span></li>
-              <li>• `product.type` 会和后台 Prompt 管理页做绑定，名称不要乱改。</li>
+              <li>• Keep `id="ai-preview-root"` exactly as shown. It is the widget mount point.</li>
+              <li>• Keep `id="mm-material-url"` exactly as shown. It stores the approved design URL.</li>
+              <li>• `data-api-base` must stay on our hosted domain: <span className="font-medium">{appUrl}</span></li>
+              <li>• Keep `product.type` unchanged so the correct prompt mapping continues to work.</li>
             </ul>
           </div>
+
         </div>
 
         <div className="space-y-5">
           <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">安装步骤</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Install steps</h2>
             <div className="mt-4 space-y-3">
               {steps.map((step, index) => (
                 <article key={step} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -101,24 +105,25 @@ export default async function InstallPage() {
           </div>
 
           <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">关键配置核对</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Key integration details</h2>
             <div className="mt-4 space-y-3">
-              <ConfigItem icon={Globe} label="应用域名" value={appUrl} />
-              <ConfigItem icon={Code2} label="脚本地址" value={`${appUrl}/widget.js`} />
-              <ConfigItem icon={Link2} label="订单回调" value={`${appUrl}/api/shopify/orders`} />
-              <ConfigItem icon={ShieldCheck} label="当前默认模型" value={setting.activeModel} />
+              <ConfigItem icon={Globe} label="App domain" value={appUrl} />
+              <ConfigItem icon={Code2} label="Script URL" value={`${appUrl}/widget.js`} />
+              <ConfigItem icon={Link2} label="Order callback" value={`${appUrl}/api/shopify/orders`} />
+              <ConfigItem icon={ShieldCheck} label="Default model" value={setting.activeModel} />
             </div>
           </div>
 
           <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">上线前检查</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Pre-launch checklist</h2>
             <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-500">
-              <li>1. Custom Liquid 是否放在颜色选择器上方。</li>
-              <li>2. 上传预览成功后，隐藏字段是否写入设计图 URL。</li>
-              <li>3. 点击 Use This Design 后，才允许进入颜色与 Add to cart。</li>
-              <li>4. 店铺主题如有特殊 variant DOM，需要再做一轮选择器适配。</li>
+              <li>1. Confirm the Custom Liquid block sits above the variant / color picker.</li>
+              <li>2. Confirm the approved design URL is written into the hidden field after preview approval.</li>
+              <li>3. Confirm shoppers can only continue to color selection after clicking Use This Design.</li>
+              <li>4. If the theme uses a custom variant layout, run one final selector compatibility check before launch.</li>
             </ul>
           </div>
+
         </div>
       </div>
     </>

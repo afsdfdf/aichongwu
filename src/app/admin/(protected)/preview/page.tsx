@@ -11,11 +11,12 @@ export default async function PreviewPage() {
     <>
       <div className="admin-panel p-5 lg:p-6">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Function Preview</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">上传模块高保真功能预览</h1>
+        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">High-fidelity upload module preview</h1>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-          这一页不再是概念说明，而是按你提供的上传模块文档去复刻 Shopify 商品页场景：上传入口、四步流程、弹窗、原图/结果图、确认设计后再进入颜色选择与下单流程。
+          This preview recreates the real Shopify product page flow from the upload module document: upload entry, four-step flow, modal, original image vs generated design, and the gated move into color selection only after design approval.
         </p>
       </div>
+
 
       <div className="admin-panel overflow-hidden p-0">
         <div className="grid min-h-[860px] xl:grid-cols-[1.2fr_0.8fr]">
@@ -60,7 +61,8 @@ export default async function PreviewPage() {
                 <div className="rounded-2xl border border-[#eadfce] bg-white p-5">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-[#8c7765]">Step 2 · Choose Color</p>
-                    <p className="text-xs text-[#8c7765]">文档要求：确认设计后才进入变体选择</p>
+                    <p className="text-xs text-[#8c7765]">Design approval is required before color selection becomes available.</p>
+
                   </div>
 
                   <div className="product-detail__variant-picker grid gap-3 sm:grid-cols-3">
@@ -93,17 +95,19 @@ export default async function PreviewPage() {
 
           <section className="bg-white px-6 py-6">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="text-lg font-semibold text-slate-900">本页复刻目标</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Preview goals</h3>
               <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
-                <li>1. 上传按钮、Trust points、Social proof、四步流程条按文档结构展示。</li>
-                <li>2. 弹窗需包含上传引导页、处理中/结果页、确认设计动作。</li>
-                <li>3. 设计确认后写入隐藏字段，再进入颜色选择和下单。</li>
-                <li>4. 保留 Shopify 商品页语境，而不是独立 demo 卡片。</li>
+                <li>1. Show the upload button, trust points, social proof, and four-step flow in the same structure as the source module.</li>
+                <li>2. Keep the modal flow: upload guidance, processing state, result state, and design approval action.</li>
+                <li>3. Write the approved design URL into hidden fields before shoppers continue to color selection.</li>
+                <li>4. Preserve the real Shopify product page context instead of showing a detached demo card.</li>
               </ul>
             </div>
 
+
+
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="text-lg font-semibold text-slate-900">当前接线</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Current integration</h3>
               <div className="mt-4 grid gap-3">
                 <PreviewInfo label="Preview page API base" value="https://aichongwu.vercel.app" />
                 <PreviewInfo label="Widget button text" value="Upload Your Pet Photo" />
@@ -113,15 +117,17 @@ export default async function PreviewPage() {
             </div>
 
 
+
             <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-              <h3 className="text-lg font-semibold text-emerald-900">深度检查重点</h3>
+              <h3 className="text-lg font-semibold text-emerald-900">Delivery checkpoints</h3>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-emerald-800">
-                <li>• 上传入口、Trust points、Social proof、四步流程条保持文档式结构。</li>
-                <li>• 弹窗流程仍是上传引导 → 处理中/结果 → Try Again / Use This Design。</li>
-                <li>• 点击 Use This Design 后，才显示下一步进入颜色选择与下单。</li>
-                <li>• 对外只替换接口接入，域名统一走 `https://aichongwu.vercel.app`。</li>
+                <li>• Keep the upload entry, trust points, social proof, and four-step flow aligned with the document layout.</li>
+                <li>• Keep the modal journey as upload guidance → processing / result → Try Again / Use This Design.</li>
+                <li>• Only reveal the next step after shoppers confirm the design.</li>
+                <li>• Replace only the backend integration, while keeping the hosted domain on `https://aichongwu.vercel.app`.</li>
               </ul>
             </div>
+
 
           </section>
         </div>

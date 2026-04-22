@@ -60,11 +60,9 @@ export function ModelSettingsForm({
   const providerDef = getProviderById(selectedProviderId);
 
   return (
-    <div className="space-y-2">
-      {/* Provider selector row + config in one card */}
-      <div className="rounded border border-slate-200 bg-white px-3 py-2">
-        {/* Provider pills */}
-        <div className="flex flex-wrap items-center gap-1">
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm lg:px-6 lg:py-6">
+        <div className="flex flex-wrap items-center gap-2.5 lg:gap-3">
           {PROVIDERS.map((def) => {
             const configured = providers.find((p) => p.providerDefId === def.id);
             const hasKey = configured?.hasApiKey ?? false;
@@ -74,27 +72,26 @@ export function ModelSettingsForm({
                 key={def.id}
                 type="button"
                 onClick={() => setSelectedProviderId(def.id)}
-                className={`inline-flex items-center gap-0.5 rounded px-2 py-0.5 text-[11px] font-medium transition ${
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition lg:px-5 lg:py-2.5 lg:text-base ${
                   isActive
-                    ? "bg-blue-600 text-white"
+                    ? "bg-blue-600 text-white shadow-sm"
                     : hasKey
                       ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
                 {def.label}
-                {hasKey && !isActive && <CheckCircle2 className="size-2.5" />}
+                {hasKey && !isActive && <CheckCircle2 className="size-4" />}
               </button>
             );
           })}
           {state.message && (
-            <span className={`ml-auto text-[10px] ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
+            <span className={`ml-auto text-sm font-medium ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
               {state.message}
             </span>
           )}
         </div>
 
-        {/* Config form inline */}
         {selectedProvider && providerDef ? (
           <ProviderConfigCard
             provider={selectedProvider}
@@ -109,11 +106,11 @@ export function ModelSettingsForm({
         ) : null}
       </div>
 
-      {/* Test + Prompt (collapsed) */}
       <TestAndPromptWorkspace providers={providers} activeModel={activeModel} />
     </div>
   );
 }
+
 
 // ── Provider config (inline, no extra padding) ──
 
@@ -147,7 +144,7 @@ function ProviderConfigCard({
   async function detectModels() {
     const key = apiKeyInput.trim();
     const url = baseUrlInput.trim();
-    if (!key || !url) { setDetectMessage("先填 Key+URL"); return; }
+    if (!key || !url) { setDetectMessage("Enter API key and Base URL first"); return; }
     setDetecting(true); setDetectMessage(""); setDetectedModels([]);
     try {
       const res = await fetch("/api/providers/detect-models", {
@@ -156,9 +153,9 @@ function ProviderConfigCard({
         body: JSON.stringify({ baseUrl: url, apiKey: key }),
       });
       const data = (await res.json()) as { ok?: boolean; message?: string; models?: DetectedModel[] };
-      if (data.ok && data.models) { setDetectedModels(data.models); setDetectMessage(`${data.models.length} 模型`); }
-      else { setDetectMessage(data.message || "失败"); setDetectedModels([]); }
-    } catch { setDetectMessage("请求失败"); }
+      if (data.ok && data.models) { setDetectedModels(data.models); setDetectMessage(`${data.models.length} models detected`); }
+      else { setDetectMessage(data.message || "Detection failed"); setDetectedModels([]); }
+    } catch { setDetectMessage("Request failed"); }
     setDetecting(false);
   }
 
@@ -197,7 +194,7 @@ function ProviderConfigCard({
           />
         </div>
         <button type="submit" disabled={pending} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-          {pending ? "..." : "保存"}
+          {pending ? "Saving..." : "Save"}
         </button>
         <button
           type="button"
@@ -205,7 +202,7 @@ function ProviderConfigCard({
           disabled={detecting || (!apiKeyInput.trim() && !provider.hasApiKey) || !baseUrlInput.trim()}
           className="shrink-0 rounded bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50"
         >
-          {detecting ? "..." : "检测"}
+          {detecting ? "Detecting..." : "Detect models"}
         </button>
         {detectMessage && (
           <span className={`shrink-0 self-center text-[10px] ${detectedModels.length > 0 ? "text-emerald-600" : "text-amber-600"}`}>
@@ -225,12 +222,12 @@ function ProviderConfigCard({
                 <div className="flex items-center gap-1 min-w-0">
                   {m.type === "video" ? <VideoIcon className="size-2.5 text-purple-500 shrink-0" /> : <ImageIcon className="size-2.5 text-blue-500 shrink-0" />}
                   <span className="text-[10px] text-slate-900 truncate">{m.id}</span>
-                  {isCurrentMain && <span className="rounded bg-blue-600 px-0.5 text-[9px] text-white">主</span>}
-                  {isAlreadyAdded && !isCurrentMain && <span className="rounded bg-emerald-100 px-0.5 text-[9px] text-emerald-700">已有</span>}
+                  {isCurrentMain && <span className="rounded bg-blue-600 px-0.5 text-[9px] text-white">Primary</span>}
+                  {isAlreadyAdded && !isCurrentMain && <span className="rounded bg-emerald-100 px-0.5 text-[9px] text-emerald-700">Added</span>}
                 </div>
                 {!isAlreadyAdded && (
                   <button type="button" onClick={() => addDetectedModel(m.id, provider.id, providerDef.id)} className="shrink-0 rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-700 hover:bg-blue-100">
-                    选用
+                    Add
                   </button>
                 )}
               </div>
@@ -250,11 +247,11 @@ function ProviderConfigCard({
                 {modelDef?.model.label || model.modelName || model.id}
                 {isMain && " ★"}
                 {!isMain && (
-                  <button type="button" onClick={() => onManageProvider("set_main", { modelId: model.id })} className="text-blue-500 hover:text-blue-700" title="设为主模型">
+                  <button type="button" onClick={() => onManageProvider("set_main", { modelId: model.id })} className="text-blue-500 hover:text-blue-700" title="Set as primary model">
                     <Zap className="size-2.5" />
                   </button>
                 )}
-                <button type="button" onClick={() => onManageProvider("delete_model", { modelId: model.id })} className="text-rose-400 hover:text-rose-600" title="移除">
+                <button type="button" onClick={() => onManageProvider("delete_model", { modelId: model.id })} className="text-rose-400 hover:text-rose-600" title="Remove model">
                   <Trash2 className="size-2.5" />
                 </button>
               </span>
@@ -350,8 +347,8 @@ function TestAndPromptWorkspace({
   }
 
   async function handleTest() {
-    if (!selectedModel) { setResultError("请先配置模型"); return; }
-    if (!prompt.trim()) { setResultError("输入提示词"); return; }
+    if (!selectedModel) { setResultError("Configure a model first"); return; }
+    if (!prompt.trim()) { setResultError("Enter a prompt first"); return; }
     if (!sourceBase64) { fileInputRef.current?.click(); return; }
     await doGenerate(sourceBase64);
   }
@@ -375,13 +372,13 @@ function TestAndPromptWorkspace({
       });
       const data = (await res.json()) as { ok?: boolean; message?: string; outputImageUrl?: string };
       if (data.ok && data.outputImageUrl) setResultImageUrl(data.outputImageUrl);
-      else setResultError(data.message || "失败");
-    } catch { setResultError("请求失败"); }
+      else setResultError(data.message || "Generation failed");
+    } catch { setResultError("Request failed"); }
     setGenerating(false);
   }
 
   async function handleSavePrompt() {
-    if (!prompt.trim()) { setSaveMessage({ ok: false, text: "❌ 空" }); return; }
+    if (!prompt.trim()) { setSaveMessage({ ok: false, text: "Prompt cannot be empty" }); return; }
     setSavingPrompt(true); setSaveMessage(null);
     try {
       const res = await fetch("/api/providers/manage", {
@@ -397,9 +394,9 @@ function TestAndPromptWorkspace({
         }),
       });
       const data = (await res.json()) as { ok?: boolean; message?: string };
-      if (data.ok) { setSaveMessage({ ok: true, text: "✅ 已保存" }); await loadPrompts(); }
-      else setSaveMessage({ ok: false, text: `❌ ${data.message || "失败"}` });
-    } catch { setSaveMessage({ ok: false, text: "❌ 网络错误" }); }
+      if (data.ok) { setSaveMessage({ ok: true, text: "Prompt saved" }); await loadPrompts(); }
+      else setSaveMessage({ ok: false, text: data.message || "Save failed" });
+    } catch { setSaveMessage({ ok: false, text: "Network error" }); }
     setSavingPrompt(false);
     setTimeout(() => setSaveMessage(null), 3000);
   }
