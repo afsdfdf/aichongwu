@@ -1,7 +1,7 @@
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 const trustPoints = [
   "Upload a photo, see your pet as a sculpted portrait · FREE",

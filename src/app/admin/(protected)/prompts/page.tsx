@@ -2,7 +2,7 @@ import { PromptEditor } from "@/components/prompt-editor";
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export default async function PromptsPage() {
   const shopDomain = getDefaultShopDomain();

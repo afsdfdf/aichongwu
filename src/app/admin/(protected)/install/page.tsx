@@ -1,7 +1,7 @@
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 const documentSteps = [
   "Memory Mint - 定制功能独立模块 (v3)",

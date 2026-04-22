@@ -893,6 +893,7 @@ export async function syncHistoricalGenerationsFromBucket(shopDomain = getDefaul
       orderName: null,
       orderNumber: null,
       status: "imported",
+      designConfirmedAt: null,
       metadata: {
         imported: true,
         originalKey: original.key,

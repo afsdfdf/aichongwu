@@ -9,7 +9,7 @@ import { getDashboardData } from "@/lib/dashboard";
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
   const shopDomain = getDefaultShopDomain();

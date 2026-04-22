@@ -4,7 +4,7 @@ import { HistorySyncForm } from "@/components/history-sync-form";
 import { listGenerationRecords } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   searchParams?: Promise<{
