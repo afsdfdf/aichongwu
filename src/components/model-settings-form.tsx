@@ -1,24 +1,22 @@
 "use client";
 
-import { useActionState, useState, useRef, useEffect } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
+  Cpu,
   Eye,
   EyeOff,
-  LoaderCircle,
-  Save,
-  Search,
-  Trash2,
-  Zap,
   ImageIcon,
-  VideoIcon,
+  LoaderCircle,
+  PlugZap,
+  Save,
+  Sparkles,
+  Trash2,
   Upload,
   X,
-  Sparkles,
-  Pencil,
-  Check,
+  Zap,
 } from "lucide-react";
-import { PROVIDERS, getProviderById, getModelDefById, type ProviderDefinition } from "@/lib/catalog";
+import { PROVIDERS, getModelDefById, getProviderById } from "@/lib/catalog";
 import { saveStoreSettingAction } from "@/app/admin/(protected)/actions";
 import type { ProviderSummary } from "@/lib/store";
 
@@ -26,11 +24,15 @@ const initialState = { ok: false, message: "" };
 
 type DetectedModel = {
   id: string;
-  type: string;
+  type: "image" | "video" | "other";
+  adapter: string;
+  endpoint: string;
+  providerId: string;
+  protocol: "gemini" | "openai";
   matchedKeywords?: string[];
 };
 
-type SavedPrompt = {
+type PromptRow = {
   id: string;
   productType: string;
   displayName: string;
@@ -53,57 +55,111 @@ export function ModelSettingsForm({
 }) {
   const [state, formAction, pending] = useActionState(saveStoreSettingAction, initialState);
   const [selectedProviderId, setSelectedProviderId] = useState(
-    providers.find((p) => p.models.some((m) => m.id === activeModel))?.id || providers[0]?.id || "openai",
+    providers.find((provider) => provider.models.some((model) => model.id === activeModel))?.id ||
+      providers[0]?.id ||
+      "openai",
   );
 
-  const selectedProvider = providers.find((p) => p.id === selectedProviderId);
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
   const providerDef = getProviderById(selectedProviderId);
+  const currentLiveModel = useMemo(
+    () =>
+      providers
+        .flatMap((provider) =>
+          provider.models.map((model) => ({
+            ...model,
+            providerLabel: provider.label,
+          })),
+        )
+        .find((model) => model.id === activeModel),
+    [providers, activeModel],
+  );
+  const currentLiveModelDef = currentLiveModel ? getModelDefById(currentLiveModel.id) : null;
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm lg:px-6 lg:py-6">
-        <div className="flex flex-wrap items-center gap-2.5 lg:gap-3">
-          {PROVIDERS.map((def) => {
-            const configured = providers.find((p) => p.providerDefId === def.id);
-            const hasKey = configured?.hasApiKey ?? false;
-            const isActive = selectedProviderId === def.id;
-            return (
-              <button
-                key={def.id}
-                type="button"
-                onClick={() => setSelectedProviderId(def.id)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition lg:px-5 lg:py-2.5 lg:text-base ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : hasKey
-                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {def.label}
-                {hasKey && !isActive && <CheckCircle2 className="size-4" />}
-              </button>
-            );
-          })}
-          {state.message && (
-            <span className={`ml-auto text-sm font-medium ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
-              {state.message}
-            </span>
-          )}
+      <div className="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
+          <div className="flex flex-wrap gap-2.5">
+            {PROVIDERS.map((provider) => {
+              const configured = providers.find((item) => item.providerDefId === provider.id);
+              const isActive = selectedProviderId === provider.id;
+              return (
+                <button
+                  key={provider.id}
+                  type="button"
+                  onClick={() => setSelectedProviderId(provider.id)}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : configured?.hasApiKey
+                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {provider.label}
+                  {configured?.hasApiKey && !isActive ? <CheckCircle2 className="size-4" /> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedProvider && providerDef ? (
+            <ProviderConfigCard
+              provider={selectedProvider}
+              providerDefId={providerDef.id}
+              providerTitle={providerDef.label}
+              providerDescription={providerDef.description}
+              providerDefaultBaseUrl={providerDef.defaultBaseUrl}
+              activeModel={activeModel}
+              widgetAccentColor={widgetAccentColor}
+              widgetButtonText={widgetButtonText}
+              formAction={formAction}
+              pending={pending}
+              onSelectProvider={setSelectedProviderId}
+            />
+          ) : null}
         </div>
 
-        {selectedProvider && providerDef ? (
-          <ProviderConfigCard
-            provider={selectedProvider}
-            providerDef={providerDef}
-            activeModel={activeModel}
-            widgetAccentColor={widgetAccentColor}
-            widgetButtonText={widgetButtonText}
-            formAction={formAction}
-            pending={pending}
-            state={state}
+        <div className="space-y-4">
+          <SummaryCard
+            icon={<Cpu className="size-5" />}
+            title="Current live model"
+            body={
+              <>
+                <p className="text-xl font-semibold text-slate-900">
+                  {currentLiveModelDef?.model.label || currentLiveModel?.modelName || activeModel}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {currentLiveModel?.providerLabel || "Unknown provider"} · {currentLiveModel?.adapter || "Unknown adapter"}
+                </p>
+              </>
+            }
           />
-        ) : null}
+
+          <SummaryCard
+            icon={<PlugZap className="size-5" />}
+            title="Detection rules"
+            body={
+              <ul className="space-y-2 text-sm leading-6 text-slate-600">
+                <li>1. Detect whether the endpoint is Gemini or OpenAI-compatible before suggesting models.</li>
+                <li>2. Save each model with its own endpoint path, not one shared guessed path.</li>
+                <li>3. Add the model you actually want, then set it as the current live model.</li>
+                <li>4. Use image-to-image compatible paths for storefront production generation.</li>
+              </ul>
+            }
+          />
+
+          <SummaryCard
+            icon={<Save className="size-5" />}
+            title="Latest save feedback"
+            body={
+              <p className={`text-sm leading-6 ${state.ok ? "text-emerald-600" : "text-slate-500"}`}>
+                {state.message || "Save credentials first, then detect the endpoint family and add the tested model."}
+              </p>
+            }
+          />
+        </div>
       </div>
 
       <TestAndPromptWorkspace providers={providers} activeModel={activeModel} />
@@ -111,159 +167,296 @@ export function ModelSettingsForm({
   );
 }
 
-
-// ── Provider config (inline, no extra padding) ──
-
 function ProviderConfigCard({
   provider,
-  providerDef,
+  providerDefId,
+  providerTitle,
+  providerDescription,
+  providerDefaultBaseUrl,
   activeModel,
   widgetAccentColor,
   widgetButtonText,
   formAction,
   pending,
-  state,
+  onSelectProvider,
 }: {
   provider: ProviderSummary;
-  providerDef: ProviderDefinition;
+  providerDefId: string;
+  providerTitle: string;
+  providerDescription: string;
+  providerDefaultBaseUrl: string;
   activeModel: string;
   widgetAccentColor: string;
   widgetButtonText: string;
   formAction: (payload: FormData) => void;
   pending: boolean;
-  state: { ok: boolean; message: string };
+  onSelectProvider: (providerId: string) => void;
 }) {
   const [showKey, setShowKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [baseUrlInput, setBaseUrlInput] = useState(provider.baseUrl || providerDef.defaultBaseUrl || "");
-
+  const [baseUrlInput, setBaseUrlInput] = useState(provider.baseUrl || providerDefaultBaseUrl || "");
   const [detecting, setDetecting] = useState(false);
   const [detectedModels, setDetectedModels] = useState<DetectedModel[]>([]);
   const [detectMessage, setDetectMessage] = useState("");
+  const [detectedProtocol, setDetectedProtocol] = useState("");
+
+  useEffect(() => {
+    setApiKeyInput("");
+    setBaseUrlInput(provider.baseUrl || providerDefaultBaseUrl || "");
+    setDetectedModels([]);
+    setDetectMessage("");
+    setDetectedProtocol("");
+  }, [provider.id, provider.baseUrl, providerDefaultBaseUrl]);
 
   async function detectModels() {
-    const key = apiKeyInput.trim();
-    const url = baseUrlInput.trim();
-    if (!key || !url) { setDetectMessage("Enter API key and Base URL first"); return; }
-    setDetecting(true); setDetectMessage(""); setDetectedModels([]);
+    const apiKey = apiKeyInput.trim();
+    const baseUrl = baseUrlInput.trim();
+    if (!apiKey && !provider.hasApiKey) {
+      setDetectMessage("Paste an API key first.");
+      return;
+    }
+    if (!baseUrl) {
+      setDetectMessage("Paste an endpoint or base URL first.");
+      return;
+    }
+
+    setDetecting(true);
+    setDetectedModels([]);
+    setDetectMessage("");
+    setDetectedProtocol("");
+
     try {
-      const res = await fetch("/api/providers/detect-models", {
+      const response = await fetch("/api/providers/detect-models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl: url, apiKey: key }),
+        body: JSON.stringify({ baseUrl, apiKey }),
       });
-      const data = (await res.json()) as { ok?: boolean; message?: string; models?: DetectedModel[] };
-      if (data.ok && data.models) { setDetectedModels(data.models); setDetectMessage(`${data.models.length} models detected`); }
-      else { setDetectMessage(data.message || "Detection failed"); setDetectedModels([]); }
-    } catch { setDetectMessage("Request failed"); }
-    setDetecting(false);
+      const data = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        models?: DetectedModel[];
+        protocol?: string;
+        providerId?: string;
+        normalizedBaseUrl?: string;
+      };
+
+      if (!data.ok || !data.models) {
+        setDetectMessage(data.message || "Detection failed.");
+        return;
+      }
+
+      setDetectedModels(data.models);
+      setDetectMessage(data.message || `${data.models.length} models detected.`);
+      setDetectedProtocol(
+        data.protocol === "gemini"
+          ? "Gemini generateContent"
+          : data.protocol === "mixed"
+            ? "Mixed OpenAI + Gemini"
+            : "OpenAI compatible",
+      );
+
+      if (data.providerId) {
+        onSelectProvider(data.providerId);
+      }
+      if (data.normalizedBaseUrl) {
+        setBaseUrlInput(data.normalizedBaseUrl);
+      }
+    } catch {
+      setDetectMessage("Request failed.");
+    } finally {
+      setDetecting(false);
+    }
   }
 
   return (
-    <form action={formAction} className="mt-1.5 space-y-1.5">
+    <form action={formAction} className="mt-5 space-y-5">
       <input type="hidden" name="providerId" value={provider.id} />
       <input type="hidden" name="activeModel" value={activeModel} />
       <input type="hidden" name="widgetAccentColor" value={widgetAccentColor} />
       <input type="hidden" name="widgetButtonText" value={widgetButtonText} />
 
-      {/* Key + URL one row */}
-      <div className="flex gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="relative">
-            <input
-              name="apiKey"
-              type={showKey ? "text" : "password"}
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder={provider.hasApiKey ? "Key ●●●" : "API Key"}
-              autoComplete="off"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1 pr-7 text-[11px] text-slate-900 outline-none"
-            />
-            <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              {showKey ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+      <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Provider connection</p>
+            <h3 className="mt-1 text-lg font-semibold text-slate-900">{providerTitle}</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">{providerDescription}</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_1.25fr_auto_auto]">
+            <div className="min-w-0">
+              <label className="mb-1 block text-xs font-medium text-slate-600">API Key</label>
+              <div className="relative">
+                <input
+                  name="apiKey"
+                  type={showKey ? "text" : "password"}
+                  value={apiKeyInput}
+                  onChange={(event) => setApiKeyInput(event.target.value)}
+                  placeholder={provider.hasApiKey ? "API key already saved" : "Paste API key"}
+                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-10 text-sm text-slate-900 outline-none transition focus:border-blue-400"
+                />
+                <button type="button" onClick={() => setShowKey((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-1 block text-xs font-medium text-slate-600">Endpoint or Base URL</label>
+              <input
+                name="baseUrl"
+                value={baseUrlInput}
+                onChange={(event) => setBaseUrlInput(event.target.value)}
+                placeholder={providerDefaultBaseUrl || "Paste the endpoint or base URL"}
+                className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={pending}
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {pending ? "Saving..." : "Save"}
+            </button>
+
+            <button
+              type="button"
+              onClick={detectModels}
+              disabled={detecting || (!apiKeyInput.trim() && !provider.hasApiKey) || !baseUrlInput.trim()}
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {detecting ? "Detecting..." : "Detect models"}
             </button>
           </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                Protocol: {detectedProtocol || "Not detected yet"}
+              </span>
+              <span className="text-sm text-slate-500">
+                {detectMessage || "Detect first, then save the model with its own path."}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <input
-            name="baseUrl"
-            value={baseUrlInput}
-            onChange={(e) => setBaseUrlInput(e.target.value)}
-            placeholder={providerDef.defaultBaseUrl || "Base URL"}
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-900 outline-none"
-          />
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Configured models</p>
+              <p className="mt-1 text-sm text-slate-500">Current provider models with their saved endpoint paths.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              Current: {activeModel}
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {provider.models.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                No models saved for this provider yet.
+              </div>
+            ) : (
+              provider.models.map((model) => {
+                const modelDef = getModelDefById(model.id);
+                const isMain = model.id === activeModel;
+                return (
+                  <div key={model.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-900">{modelDef?.model.label || model.modelName || model.id}</span>
+                          {isMain ? (
+                            <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">Live</span>
+                          ) : null}
+                          {model.isEnabled ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Enabled</span>
+                          ) : (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Disabled</span>
+                          )}
+                        </div>
+                        <p className="mt-1 break-all text-xs leading-5 text-slate-500">{model.endpoint || "No endpoint saved"}</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!isMain ? (
+                          <button
+                            type="button"
+                            onClick={() => onManageProvider("set_main", { modelId: model.id })}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          >
+                            Set current
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => onManageProvider("delete_model", { modelId: model.id })}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-        <button type="submit" disabled={pending} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-          {pending ? "Saving..." : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={detectModels}
-          disabled={detecting || (!apiKeyInput.trim() && !provider.hasApiKey) || !baseUrlInput.trim()}
-          className="shrink-0 rounded bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-        >
-          {detecting ? "Detecting..." : "Detect models"}
-        </button>
-        {detectMessage && (
-          <span className={`shrink-0 self-center text-[10px] ${detectedModels.length > 0 ? "text-emerald-600" : "text-amber-600"}`}>
-            {detectMessage}
-          </span>
-        )}
       </div>
 
-      {/* Detected models (compact) */}
-      {detectedModels.length > 0 && (
-        <div className="max-h-28 overflow-y-auto rounded border border-slate-200 bg-slate-50">
-          {detectedModels.map((m) => {
-            const isAlreadyAdded = provider.models.some((pm) => pm.modelName === m.id || pm.id === m.id);
-            const isCurrentMain = provider.models.find((pm) => pm.modelName === m.id || pm.id === m.id)?.id === activeModel;
-            return (
-              <div key={m.id} className={`flex items-center justify-between border-b border-slate-100 px-2 py-0.5 last:border-0 ${isCurrentMain ? "bg-blue-50" : isAlreadyAdded ? "bg-emerald-50/50" : ""}`}>
-                <div className="flex items-center gap-1 min-w-0">
-                  {m.type === "video" ? <VideoIcon className="size-2.5 text-purple-500 shrink-0" /> : <ImageIcon className="size-2.5 text-blue-500 shrink-0" />}
-                  <span className="text-[10px] text-slate-900 truncate">{m.id}</span>
-                  {isCurrentMain && <span className="rounded bg-blue-600 px-0.5 text-[9px] text-white">Primary</span>}
-                  {isAlreadyAdded && !isCurrentMain && <span className="rounded bg-emerald-100 px-0.5 text-[9px] text-emerald-700">Added</span>}
-                </div>
-                {!isAlreadyAdded && (
-                  <button type="button" onClick={() => addDetectedModel(m.id, provider.id, providerDef.id)} className="shrink-0 rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-700 hover:bg-blue-100">
-                    Add
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {detectedModels.length > 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Detected models</p>
+              <p className="mt-1 text-sm text-slate-500">Choose the detected path first, then save the actual model you want to run.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {detectedModels.length} detected
+            </span>
+          </div>
 
-      {/* Configured models (compact inline tags) */}
-      {provider.models.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {provider.models.map((model) => {
-            const modelDef = getModelDefById(model.id);
-            const isMain = model.id === activeModel;
-            return (
-              <span key={model.id} className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${isMain ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}>
-                {modelDef?.model.label || model.modelName || model.id}
-                {isMain && " ★"}
-                {!isMain && (
-                  <button type="button" onClick={() => onManageProvider("set_main", { modelId: model.id })} className="text-blue-500 hover:text-blue-700" title="Set as primary model">
-                    <Zap className="size-2.5" />
-                  </button>
-                )}
-                <button type="button" onClick={() => onManageProvider("delete_model", { modelId: model.id })} className="text-rose-400 hover:text-rose-600" title="Remove model">
-                  <Trash2 className="size-2.5" />
-                </button>
-              </span>
-            );
-          })}
+          <div className="mt-4 grid gap-3">
+            {detectedModels.map((model) => {
+              const isAlreadyAdded = provider.models.some((item) => item.id === model.id || item.modelName === model.id);
+              const isCurrent = provider.models.find((item) => item.id === model.id || item.modelName === model.id)?.id === activeModel;
+              return (
+                <div key={model.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {model.type === "video" ? <Sparkles className="size-4 shrink-0 text-purple-500" /> : <ImageIcon className="size-4 shrink-0 text-blue-500" />}
+                        <span className="text-sm font-semibold text-slate-900">{model.id}</span>
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{model.protocol}</span>
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{model.adapter}</span>
+                        {isCurrent ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">Current</span> : null}
+                        {isAlreadyAdded && !isCurrent ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Saved</span> : null}
+                      </div>
+                      <p className="mt-1 break-all text-xs leading-5 text-slate-500">{model.endpoint}</p>
+                    </div>
+
+                    {!isAlreadyAdded ? (
+                      <button
+                        type="button"
+                        onClick={() => addDetectedModel(model, provider.id)}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                      >
+                        Add model
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
+      ) : null}
     </form>
   );
 }
-
-// ── Test + Prompt Workspace (collapsible, ultra-compact) ──
 
 function TestAndPromptWorkspace({
   providers,
@@ -272,297 +465,280 @@ function TestAndPromptWorkspace({
   providers: ProviderSummary[];
   activeModel: string;
 }) {
-  const activeProvider = providers.find((p) => p.models.some((m) => m.id === activeModel));
-  const testableModels = activeProvider?.models.filter((m) => {
-    const def = getModelDefById(m.id);
-    return def?.model.supportsImageTest !== false;
-  }) || [];
-  const selectedModel = testableModels.find((m) => m.id === activeModel) || testableModels[0];
+  const activeProvider = providers.find((provider) => provider.models.some((model) => model.id === activeModel));
+  const currentModel = activeProvider?.models.find((model) => model.id === activeModel) || activeProvider?.models[0];
 
-  const [prompt, setPrompt] = useState("A premium pet memorial portrait, centered composition, soft studio lighting, elegant circular frame, realistic texture, clean background.");
-  const [negativePrompt, setNegativePrompt] = useState("");
+  const [prompt, setPrompt] = useState(
+    "Use the uploaded photo as the subject. Generate a premium memorial preview, preserve the identity and key details of the source image, and follow the saved backend prompt style.",
+  );
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
   const [sourceBase64, setSourceBase64] = useState<string | null>(null);
+  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
+  const [resultMeta, setResultMeta] = useState<{
+    usedModelKey?: string;
+    sourceImageForwarded?: boolean;
+  } | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [savedPrompts, setSavedPrompts] = useState<PromptRow[]>([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [generating, setGenerating] = useState(false);
-  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
-  const [resultError, setResultError] = useState<string | null>(null);
-
-  const [savingPrompt, setSavingPrompt] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-  const [loadingPrompts, setLoadingPrompts] = useState(true);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  useEffect(() => { loadPrompts(); }, []);
+  useEffect(() => {
+    loadPrompts();
+  }, []);
 
   async function loadPrompts() {
     try {
-      const res = await fetch("/api/providers/manage", {
+      const response = await fetch("/api/providers/manage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "list_prompts" }),
       });
-      const data = (await res.json()) as { ok?: boolean; prompts?: SavedPrompt[] };
+      const data = (await response.json()) as { ok?: boolean; prompts?: PromptRow[] };
       if (data.ok && data.prompts) setSavedPrompts(data.prompts);
-    } catch { /* */ }
-    setLoadingPrompts(false);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingPrompts(false);
+    }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setResultError("≤10MB"); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUri = reader.result as string;
-      setSourcePreview(dataUri);
-      setSourceBase64(dataUri);
-    };
-    reader.readAsDataURL(file);
+  async function runTest(withSource?: string) {
+    if (!currentModel) {
+      setResultError("Configure a live model first.");
+      return;
+    }
+    if (!prompt.trim()) {
+      setResultError("Enter a test prompt first.");
+      return;
+    }
+
+    setGenerating(true);
+    setResultError(null);
+    setResultImageUrl(null);
+    setResultMeta(null);
+
+    try {
+      const response = await fetch("/api/providers/test-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelKey: currentModel.id,
+          prompt: prompt.trim(),
+          mode: withSource || sourceBase64 ? "combined" : "text2img",
+          sourceImage: withSource || sourceBase64 || undefined,
+        }),
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        outputImageUrl?: string;
+        usedModelKey?: string;
+        sourceImageForwarded?: boolean;
+      };
+
+      if (!data.ok || !data.outputImageUrl) {
+        setResultError(data.message || "Generation failed.");
+        return;
+      }
+
+      setResultImageUrl(data.outputImageUrl);
+      setResultMeta({
+        usedModelKey: data.usedModelKey,
+        sourceImageForwarded: data.sourceImageForwarded,
+      });
+    } catch {
+      setResultError("Request failed.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
-  async function handleFileAndGenerate(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setResultError("≤10MB"); return; }
+
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUri = reader.result as string;
       setSourcePreview(dataUri);
       setSourceBase64(dataUri);
-      await doGenerate(dataUri);
+      await runTest(dataUri);
     };
     reader.readAsDataURL(file);
   }
 
-  function clearSourceImage() {
-    setSourcePreview(null);
-    setSourceBase64(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  async function handleTest() {
-    if (!selectedModel) { setResultError("Configure a model first"); return; }
-    if (!prompt.trim()) { setResultError("Enter a prompt first"); return; }
-    if (!sourceBase64) { fileInputRef.current?.click(); return; }
-    await doGenerate(sourceBase64);
-  }
-
-  async function doGenerate(srcBase64?: string) {
-    if (!selectedModel) return;
-    setGenerating(true); setResultImageUrl(null); setResultError(null);
-    try {
-      const body: Record<string, unknown> = {
-        modelKey: selectedModel.id,
-        prompt: prompt.trim(),
-        mode: (srcBase64 || sourceBase64) ? "combined" : "text2img",
-      };
-      if (srcBase64) body.sourceImage = srcBase64;
-      else if (sourceBase64) body.sourceImage = sourceBase64;
-
-      const res = await fetch("/api/providers/test-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as { ok?: boolean; message?: string; outputImageUrl?: string };
-      if (data.ok && data.outputImageUrl) setResultImageUrl(data.outputImageUrl);
-      else setResultError(data.message || "Generation failed");
-    } catch { setResultError("Request failed"); }
-    setGenerating(false);
-  }
-
-  async function handleSavePrompt() {
-    if (!prompt.trim()) { setSaveMessage({ ok: false, text: "Prompt cannot be empty" }); return; }
-    setSavingPrompt(true); setSaveMessage(null);
-    try {
-      const res = await fetch("/api/providers/manage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save_prompt",
-          productType: "test",
-          displayName: prompt.trim().slice(0, 30) + "...",
-          promptTemplate: prompt.trim(),
-          negativePrompt: negativePrompt.trim() || null,
-          isActive: true,
-        }),
-      });
-      const data = (await res.json()) as { ok?: boolean; message?: string };
-      if (data.ok) { setSaveMessage({ ok: true, text: "Prompt saved" }); await loadPrompts(); }
-      else setSaveMessage({ ok: false, text: data.message || "Save failed" });
-    } catch { setSaveMessage({ ok: false, text: "Network error" }); }
-    setSavingPrompt(false);
-    setTimeout(() => setSaveMessage(null), 3000);
-  }
-
-  async function handleDeletePrompt(id: string) {
-    setDeletingId(id);
-    try { await fetch("/api/providers/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_prompt", promptId: id }) }); await loadPrompts(); } catch { /* */ }
-    setDeletingId(null);
-  }
-
-  async function handleUpdatePrompt(id: string) {
-    try {
-      await fetch("/api/providers/manage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_prompt", promptId: id, displayName: editName, promptTemplate: prompt.trim() }),
-      });
-      setEditingPromptId(null);
-      await loadPrompts();
-    } catch { /* */ }
-  }
-
-  function applyPrompt(p: SavedPrompt) {
-    setPrompt(p.promptTemplate);
-    setNegativePrompt(p.negativePrompt || "");
-    setResultImageUrl(null);
-    setResultError(null);
-  }
-
   return (
-    <details className="rounded border border-slate-200 bg-white">
-      <summary className="cursor-pointer px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 select-none">
-        🎨 提示词测试 & 管理
-      </summary>
-      <div className="border-t border-slate-100 px-3 py-2">
-        {/* Prompt row */}
-        <div className="flex items-start gap-1.5">
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Test workspace</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-900">Prompt + image test</h3>
+          <p className="mt-1 text-sm text-slate-500">Use the current live model to confirm the endpoint really forwards the uploaded source image.</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+          Current test model: {currentModel?.id || "None"}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-3">
           <textarea
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={2}
-            placeholder="提示词..."
-            className="flex-1 min-w-0 rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] leading-tight text-slate-900 outline-none focus:border-blue-400 resize-none"
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={5}
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-blue-400"
           />
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <button type="button" onClick={handleTest} disabled={generating || !selectedModel} className="inline-flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-violet-700 disabled:opacity-50">
-              {generating ? <LoaderCircle className="size-2.5 animate-spin" /> : <Sparkles className="size-2.5" />}
-              测试
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Upload className="size-4" />
+              {sourcePreview ? "Replace source image" : "Upload source image"}
             </button>
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-0.5 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
-              <Upload className="size-2.5" />
-              {sourcePreview ? "换" : "图"}
+
+            <button
+              type="button"
+              onClick={() => runTest()}
+              disabled={generating}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              Run test
             </button>
-            <button type="button" onClick={handleSavePrompt} disabled={savingPrompt || !prompt.trim()} className="inline-flex items-center gap-0.5 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              <Save className="size-2.5" />
-              存
-            </button>
+
+            {sourcePreview ? (
+              <button type="button" onClick={() => { setSourcePreview(null); setSourceBase64(null); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                <X className="size-4" />
+                Clear image
+              </button>
+            ) : null}
+          </div>
+
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Saved prompts</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {loadingPrompts ? (
+                <span className="text-sm text-slate-500">Loading prompts...</span>
+              ) : savedPrompts.length === 0 ? (
+                <span className="text-sm text-slate-500">No saved prompts yet.</span>
+              ) : (
+                savedPrompts.map((promptRow) => (
+                  <button
+                    key={promptRow.id}
+                    type="button"
+                    onClick={() => setPrompt(promptRow.promptTemplate)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    {promptRow.displayName}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Negative prompt */}
-        <details className="mt-0.5">
-          <summary className="text-[9px] text-slate-400 cursor-pointer hover:text-slate-600">负向</summary>
-          <input value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="排除..." className="mt-0.5 w-full rounded border border-slate-200 px-1.5 py-0.5 text-[10px] outline-none" />
-        </details>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Test result preview</p>
 
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileAndGenerate} className="hidden" />
-
-        {/* Source thumb */}
-        {sourcePreview && (
-          <div className="mt-0.5 flex items-center gap-1">
-            <img src={sourcePreview} alt="" className="h-5 w-5 rounded object-cover" />
-            <button type="button" onClick={clearSourceImage} className="text-slate-400 hover:text-slate-600"><X className="size-2.5" /></button>
-          </div>
-        )}
-
-        {/* Messages */}
-        {saveMessage && <p className={`mt-0.5 text-[9px] ${saveMessage.ok ? "text-emerald-600" : "text-rose-600"}`}>{saveMessage.text}</p>}
-        {resultError && <p className="mt-0.5 text-[9px] text-rose-600">❌ {resultError}</p>}
-
-        {/* Result */}
-        {resultImageUrl && (
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <img src={resultImageUrl} alt="" className="h-12 w-12 rounded object-cover border border-slate-200" />
-            <a href={resultImageUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline">原图</a>
-          </div>
-        )}
-
-        {/* Saved prompts list */}
-        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-          <p className="text-[9px] font-medium text-slate-500 mb-0.5">已保存</p>
-          {loadingPrompts ? (
-            <p className="text-[9px] text-slate-400">...</p>
-          ) : savedPrompts.length === 0 ? (
-            <p className="text-[9px] text-slate-400">暂无</p>
-          ) : (
-            <div className="space-y-px max-h-20 overflow-y-auto">
-              {savedPrompts.map((p) => (
-                <div key={p.id} className="group flex items-center gap-0.5 rounded px-1 py-px hover:bg-slate-50 text-[10px]">
-                  {editingPromptId === p.id ? (
-                    <div className="flex-1 flex items-center gap-0.5">
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 min-w-0 rounded border border-slate-200 px-1 py-px text-[9px] outline-none" />
-                      <button type="button" onClick={() => handleUpdatePrompt(p.id)} className="text-blue-600"><Check className="size-2.5" /></button>
-                      <button type="button" onClick={() => setEditingPromptId(null)} className="text-slate-400"><X className="size-2.5" /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <button type="button" onClick={() => applyPrompt(p)} className="flex-1 text-left min-w-0 truncate text-slate-700 hover:text-blue-600" title={p.promptTemplate}>
-                        {p.displayName}
-                      </button>
-                      <button type="button" onClick={() => { setEditingPromptId(p.id); setEditName(p.displayName); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600">
-                        <Pencil className="size-2" />
-                      </button>
-                      <button type="button" onClick={() => handleDeletePrompt(p.id)} disabled={deletingId === p.id} className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-600">
-                        {deletingId === p.id ? <LoaderCircle className="size-2 animate-spin" /> : <Trash2 className="size-2" />}
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Source image</p>
+              <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                {sourcePreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={sourcePreview} alt="Source" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm text-slate-400">Upload a source image</span>
+                )}
+              </div>
             </div>
-          )}
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Generated image</p>
+              <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                {resultImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={resultImageUrl} alt="Generated" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm text-slate-400">{generating ? "Generating..." : "No result yet"}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {resultMeta ? (
+              <>
+                <MetaRow label="Used model" value={resultMeta.usedModelKey || "Unknown"} />
+                <MetaRow label="Source forwarded" value={resultMeta.sourceImageForwarded ? "true" : "false"} />
+              </>
+            ) : null}
+            {resultError ? <p className="text-sm font-medium text-rose-600">{resultError}</p> : null}
+          </div>
         </div>
       </div>
-    </details>
+    </div>
   );
 }
 
-// ── Helpers ──
-
-async function onManageProvider(action: string, payload: Record<string, unknown>) {
-  await fetch("/api/providers/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...payload }) });
-  window.location.reload();
+function SummaryCard({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
+      <div className="flex items-start gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3 text-slate-700">{icon}</div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{title}</p>
+          <div className="mt-2">{body}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-async function addDetectedModel(modelId: string, providerId: string, providerDefId: string) {
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">{label}</p>
+      <p className="mt-1 break-all text-sm font-medium text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+async function onManageProvider(action: string, payload: Record<string, unknown>) {
   await fetch("/api/providers/manage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "add_model", providerId, modelId, adapter: guessAdapter(modelId, providerDefId), endpoint: guessEndpoint(providerDefId) }),
+    body: JSON.stringify({ action, ...payload }),
   });
   window.location.reload();
 }
 
-function guessAdapter(modelId: string, providerDefId: string): string {
-  const id = modelId.toLowerCase();
-  if (providerDefId === "stability") return "stability";
-  if (providerDefId === "replicate") return "replicate";
-  if (providerDefId === "google") return "gemini";
-  if (providerDefId === "fal") return "fal-queue";
-  if (providerDefId === "midjourney") return "midjourney-async";
-  if (providerDefId === "dashscope") return "dashscope-async";
-  if (providerDefId === "volcengine") return "volcengine-async";
-  if (providerDefId === "xfyun") return "xfyun-async";
-  if (id.includes("sora")) return "openai-chat-image";
-  if (id.includes("doubao") || id.includes("seedream")) return "openai-chat-image";
-  if (id.includes("gemini")) return "openai-chat-image";
-  if (id.includes("wan")) return "dashscope-async";
-  if (id.includes("gpt-image") || id.includes("dall")) return "openai-images";
-  if (id.includes("flux") || id.includes("ideogram") || id.includes("banana") || id.includes("nano")) return "openai-chat-image";
-  return "openai-chat-image";
-}
-
-function guessEndpoint(providerDefId: string): string {
-  const def = getProviderById(providerDefId);
-  if (def?.models[0]) return def.models[0].defaultEndpoint;
-  if (providerDefId === "poloai" || providerDefId === "custom") return "/chat/completions";
-  return "/v1/images/generations";
+async function addDetectedModel(model: DetectedModel, fallbackProviderId: string) {
+  await fetch("/api/providers/manage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "add_model",
+      providerId: model.providerId || fallbackProviderId,
+      modelId: model.id,
+      modelName: model.id,
+      endpoint: model.endpoint,
+    }),
+  });
+  window.location.reload();
 }

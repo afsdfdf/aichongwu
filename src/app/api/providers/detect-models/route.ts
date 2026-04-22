@@ -1,107 +1,212 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
+import { PROVIDERS } from "@/lib/catalog";
 
 export const runtime = "nodejs";
 
-/**
- * POST /api/providers/detect-models
- * Body: { baseUrl: string, apiKey: string }
- *
- * Calls the provider's /v1/models endpoint and returns the list of available models.
- * Works with any OpenAI-compatible API (one-api, new-api, etc.)
- */
+type DetectedModel = {
+  id: string;
+  type: "image" | "video" | "other";
+  adapter: string;
+  endpoint: string;
+  providerId: string;
+  protocol: "gemini" | "openai";
+  matchedKeywords?: string[];
+};
+
+function normalizeInputBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function looksLikeGeminiEndpoint(baseUrl: string) {
+  return (
+    baseUrl.includes("generativelanguage.googleapis.com") ||
+    /\/v1beta\/models\/.+:generateContent/i.test(baseUrl) ||
+    baseUrl.includes(":generateContent")
+  );
+}
+
+function getOrigin(baseUrl: string) {
+  try {
+    const url = new URL(baseUrl);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return baseUrl;
+  }
+}
+
+function buildGeminiModelDetections(baseUrl: string): DetectedModel[] {
+  const googleProvider = PROVIDERS.find((item) => item.id === "google");
+  if (!googleProvider) return [];
+
+  const origin = getOrigin(baseUrl);
+
+  return googleProvider.models.map((model) => ({
+    id: model.id,
+    type: "image" as const,
+    adapter: model.adapter,
+    endpoint: `${origin}${model.defaultEndpoint}`,
+    providerId: "google",
+    protocol: "gemini" as const,
+    matchedKeywords: ["gemini", "generateContent"],
+  }));
+}
+
+function buildOpenAIModelsUrl(baseUrl: string) {
+  if (baseUrl.endsWith("/models") || baseUrl.endsWith("/v1/models")) return baseUrl;
+  if (baseUrl.endsWith("/v1")) return `${baseUrl}/models`;
+  if (baseUrl.includes("/v1/")) {
+    const idx = baseUrl.indexOf("/v1/");
+    return `${baseUrl.substring(0, idx + 3)}/models`;
+  }
+  return `${baseUrl}/v1/models`;
+}
+
+function inferModelEndpoint(origin: string, modelId: string, supportedTypes?: string[]) {
+  const lower = modelId.toLowerCase();
+  const types = supportedTypes || [];
+
+  if (types.includes("gemini") || lower.includes("gemini")) {
+    return {
+      adapter: "gemini",
+      endpoint: `${origin}/v1beta/models/${modelId}:generateContent`,
+      providerId: "google",
+      protocol: "gemini" as const,
+      type: "image" as const,
+    };
+  }
+
+  if (lower.includes("gpt-image")) {
+    return {
+      adapter: "openai-edit",
+      endpoint: `${origin}/v1/images/edits`,
+      providerId: "openai",
+      protocol: "openai" as const,
+      type: "image" as const,
+    };
+  }
+
+  if (lower.includes("dall") || lower.includes("imagen")) {
+    return {
+      adapter: "openai-images",
+      endpoint: `${origin}/v1/images/generations`,
+      providerId: "openai",
+      protocol: "openai" as const,
+      type: "image" as const,
+    };
+  }
+
+  if (
+    lower.includes("flux") ||
+    lower.includes("seedream") ||
+    lower.includes("doubao") ||
+    lower.includes("ideogram") ||
+    lower.includes("banana")
+  ) {
+    return {
+      adapter: "openai-chat-image",
+      endpoint: `${origin}/v1/chat/completions`,
+      providerId: "openai",
+      protocol: "openai" as const,
+      type: lower.includes("video") ? ("video" as const) : ("image" as const),
+    };
+  }
+
+  if (lower.includes("sora") || lower.includes("video") || lower.includes("kling")) {
+    return {
+      adapter: "openai-chat-image",
+      endpoint: `${origin}/v1/chat/completions`,
+      providerId: "openai",
+      protocol: "openai" as const,
+      type: "video" as const,
+    };
+  }
+
+  return {
+    adapter: "custom",
+    endpoint: `${origin}/v1/chat/completions`,
+    providerId: "custom",
+    protocol: "openai" as const,
+    type: "other" as const,
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getAdminSession();
     if (!session) {
-      return NextResponse.json({ message: "未登录" }, { status: 401 });
+      return NextResponse.json({ ok: false, message: "Unauthorized", models: [] }, { status: 401 });
     }
 
     const body = (await request.json()) as { baseUrl?: string; apiKey?: string };
     if (!body.baseUrl || !body.apiKey) {
-      return NextResponse.json({ message: "缺少 baseUrl 或 apiKey" }, { status: 400 });
+      return NextResponse.json({ ok: false, message: "Missing baseUrl or apiKey", models: [] }, { status: 400 });
     }
 
-    // Normalize base URL — strip trailing slash
-    let baseUrl = body.baseUrl.replace(/\/+$/, "");
+    const baseUrl = normalizeInputBaseUrl(body.baseUrl);
 
-    // Build the models endpoint URL
-    let modelsUrl: string;
-    if (baseUrl.endsWith("/models") || baseUrl.endsWith("/v1/models")) {
-      modelsUrl = baseUrl;
-    } else if (baseUrl.endsWith("/v1")) {
-      modelsUrl = `${baseUrl}/models`;
-    } else if (baseUrl.includes("/v1/")) {
-      // e.g. https://api.example.com/v1/chat/completions -> /v1/models
-      const v1Idx = baseUrl.indexOf("/v1/");
-      modelsUrl = baseUrl.substring(0, v1Idx + 3) + "/models";
-    } else {
-      // Try /v1/models as default
-      modelsUrl = `${baseUrl}/v1/models`;
+    if (looksLikeGeminiEndpoint(baseUrl)) {
+      const models = buildGeminiModelDetections(baseUrl);
+      return NextResponse.json({
+        ok: true,
+        protocol: "gemini",
+        providerId: "google",
+        normalizedBaseUrl: getOrigin(baseUrl),
+        message: `Detected Gemini generateContent endpoint. ${models.length} recommended models are ready.`,
+        models,
+      });
     }
 
+    const modelsUrl = buildOpenAIModelsUrl(baseUrl);
     const response = await fetch(modelsUrl, {
       headers: {
         Authorization: `Bearer ${body.apiKey}`,
         "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(15000), // 15s timeout
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       return NextResponse.json({
         ok: false,
-        message: `API 返回 ${response.status}: ${text.slice(0, 200) || response.statusText}`,
+        message: `Provider returned ${response.status}: ${text.slice(0, 200) || response.statusText}`,
         models: [],
       });
     }
 
     const data = (await response.json()) as {
-      data?: Array<{ id: string; object?: string }>;
-      models?: Array<{ id: string }>;
+      data?: Array<{ id: string; supported_endpoint_types?: string[] }>;
+      models?: Array<{ id: string; supported_endpoint_types?: string[] }>;
     };
-    const rawModels: Array<{ id: string }> = data.data || data.models || [];
+    const rawModels = data.data || data.models || [];
+    const origin = getOrigin(baseUrl);
 
-    // Filter: only keep models that look like image generation models
-    const IMAGE_KEYWORDS = [
-      "image", "dall", "gpt-image", "flux", "stable", "sdxl", "sd3",
-      "midjourney", "ideogram", "banana", "nano", "gemini", "wan",
-      "seedream", "doubao", "sora", "minimax", "kling", "cogview",
-      "playground", "recraft", "leonardo", "pix-art", "pixart",
-      "turbo", "photo", "vision", "imagen",
-    ];
+    const models: DetectedModel[] = rawModels.map((model) => {
+      const inferred = inferModelEndpoint(origin, model.id, model.supported_endpoint_types);
+      return {
+        id: model.id,
+        ...inferred,
+        matchedKeywords: model.supported_endpoint_types || [],
+      };
+    });
 
-    // Categorize models
-    const imageModels: Array<{ id: string; type: string; matchedKeywords: string[] }> = [];
-    const otherModels: Array<{ id: string; type: string }> = [];
-
-    for (const m of rawModels) {
-      const id = m.id.toLowerCase();
-      const matched = IMAGE_KEYWORDS.filter((kw) => id.includes(kw));
-
-      if (matched.length > 0) {
-        // Determine type: video vs image
-        const isVideo = id.includes("sora") || id.includes("video") || id.includes("kling") || id.includes("minimax-video");
-        imageModels.push({
-          id: m.id,
-          type: isVideo ? "video" : "image",
-          matchedKeywords: matched,
-        });
-      } else {
-        otherModels.push({ id: m.id, type: "other" });
-      }
-    }
+    const imageModels = models.filter((model) => model.type !== "other");
+    const suggestedProviderId =
+      imageModels.find((item) => item.protocol === "gemini")?.providerId ||
+      imageModels[0]?.providerId ||
+      "openai";
 
     return NextResponse.json({
       ok: true,
-      message: `检测到 ${rawModels.length} 个模型，其中 ${imageModels.length} 个生图模型`,
-      total: rawModels.length,
+      protocol: imageModels.some((item) => item.protocol === "gemini") ? "mixed" : "openai",
+      providerId: suggestedProviderId,
+      normalizedBaseUrl: origin,
+      message: `Detected ${rawModels.length} models. ${imageModels.length} image-capable models are available.`,
       models: imageModels,
-      otherModels: otherModels.slice(0, 50), // cap at 50 for non-image models
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "检测失败";
+    const message = error instanceof Error ? error.message : "Detection failed";
     return NextResponse.json({ ok: false, message, models: [] }, { status: 500 });
   }
 }

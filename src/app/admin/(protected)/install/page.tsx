@@ -1,17 +1,30 @@
-import { CheckCircle2, Code2, Globe, Link2, ShieldCheck } from "lucide-react";
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
 export const revalidate = 5;
 
+const documentSteps = [
+  "Memory Mint - 定制功能独立模块 (v3)",
+  "使用方法: Shopify 后台 > 产品页模板 > Add section > Custom Liquid > 粘贴此代码",
+  "放置位置: 变体选择器(颜色)上方",
+  "Trust points 显示在上传按钮上方",
+  "Upload Your Pet Photo 按钮带 FREE PREVIEW 标签",
+  "Social proof 位于按钮下方",
+  "Mini steps 为 4 步流程: Upload Photo / Preview Design / Choose Color / Place Order",
+  "Next / Back 按钮用于切换到颜色选择和返回设计页",
+  "Modal 包含 Photo tips、原图/效果图预览、Try Again、Use This Design",
+  "订单提交依赖 line item properties + webhook 回写",
+];
+
 function getSnippet(appUrl: string) {
   return `{%- comment -%}
 Memory Mint - Custom Upload Module (v3)
-Install path: Shopify Admin > Online Store > Themes > Customize > Product template > Add section > Custom Liquid
-Recommended placement: directly above the variant / color picker
+Install path: Shopify Admin > Product template > Add section > Custom Liquid
+Placement: above the variant / color picker
 {%- endcomment -%}
 
-<div id="ai-preview-root"
+<div
+  id="ai-preview-root"
   data-api-base="${appUrl}"
   data-shop-domain="{{ shop.permanent_domain }}"
   data-product-id="{{ product.id }}"
@@ -19,135 +32,82 @@ Recommended placement: directly above the variant / color picker
   data-product-type="{{ product.type | default: product.handle | escape }}"
   data-variant-id="{{ product.selected_or_first_available_variant.id }}"
 ></div>
-
-<input type="hidden" id="mm-material-url" name="properties[_Preview Design URL]" value="">
-
 <script src="${appUrl}/widget.js" defer></script>`;
 }
 
-function getInstallSteps() {
-  return [
-    "Open Shopify Admin > Online Store > Themes > Customize.",
-    "Open the product template where you want the upload experience to appear.",
-    "In the product information area, click Add section.",
-    "Add a Custom Liquid block.",
-    "Paste the full code snippet below exactly as shown.",
-    "Place the block directly above the variant / color picker.",
-    "Save the template, then test: upload photo → preview design → use design → choose color → add to cart.",
-  ];
-}
-
-
 export default async function InstallPage() {
   const appUrl = "https://aichongwu.vercel.app";
-  const { setting } = await getStoreContext(getDefaultShopDomain());
+  const shopDomain = getDefaultShopDomain();
+  const { setting } = await getStoreContext(shopDomain);
   const snippet = getSnippet(appUrl);
-  const steps = getInstallSteps();
 
   return (
-    <>
+    <div className="space-y-5">
       <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Shopify Install Guide</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">Install the upload widget on your Shopify product page</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-          This page is the client-ready install guide. Copy the code exactly as shown, place it above the variant picker, and the upload flow will be ready with our hosted API already connected.
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Shopify 安装文档</p>
+        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">按文档顺序交付给客户的安装说明</h1>
+        <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
+          这个页面用于直接交付客户。页面说明保持中文，方便客户按步骤安装；代码块保持英文，不改变 Shopify 接入代码结构，只接入我们的服务地址。
         </p>
       </div>
 
-
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="admin-panel p-5 lg:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Complete Custom Liquid snippet</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Paste this into the Product Template Custom Liquid block. Recommended placement: directly above the variant or color picker.
-              </p>
-
+      <div className="admin-panel p-5 lg:p-6">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">文档顺序</p>
+        <div className="mt-4 space-y-3">
+          {documentSteps.map((step, index) => (
+            <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Step {index + 1}</p>
+              <p className="mt-2 text-sm leading-7 text-slate-900">{step}</p>
             </div>
-            <div className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500">widget.js</div>
-          </div>
-
-          <pre className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-950 p-5 text-sm leading-7 text-slate-100">
-            <code>{snippet}</code>
-          </pre>
-
-          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
-            <div className="flex items-center gap-2 font-medium">
-              <CheckCircle2 className="size-4" />
-              Important rules
-            </div>
-            <ul className="mt-3 space-y-2 leading-7 text-emerald-800">
-              <li>• Keep `id="ai-preview-root"` exactly as shown. It is the widget mount point.</li>
-              <li>• Keep `id="mm-material-url"` exactly as shown. It stores the approved design URL.</li>
-              <li>• `data-api-base` must stay on our hosted domain: <span className="font-medium">{appUrl}</span></li>
-              <li>• Keep `product.type` unchanged so the correct prompt mapping continues to work.</li>
-            </ul>
-          </div>
-
-        </div>
-
-        <div className="space-y-5">
-          <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">Install steps</h2>
-            <div className="mt-4 space-y-3">
-              {steps.map((step, index) => (
-                <article key={step} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex size-6 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-                      {index + 1}
-                    </div>
-                    <p className="text-sm leading-6 text-slate-700">{step}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">Key integration details</h2>
-            <div className="mt-4 space-y-3">
-              <ConfigItem icon={Globe} label="App domain" value={appUrl} />
-              <ConfigItem icon={Code2} label="Script URL" value={`${appUrl}/widget.js`} />
-              <ConfigItem icon={Link2} label="Order callback" value={`${appUrl}/api/shopify/orders`} />
-              <ConfigItem icon={ShieldCheck} label="Default model" value={setting.activeModel} />
-            </div>
-          </div>
-
-          <div className="admin-panel p-5 lg:p-6">
-            <h2 className="text-lg font-semibold text-slate-900">Pre-launch checklist</h2>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-500">
-              <li>1. Confirm the Custom Liquid block sits above the variant / color picker.</li>
-              <li>2. Confirm the approved design URL is written into the hidden field after preview approval.</li>
-              <li>3. Confirm shoppers can only continue to color selection after clicking Use This Design.</li>
-              <li>4. If the theme uses a custom variant layout, run one final selector compatibility check before launch.</li>
-            </ul>
-          </div>
-
+          ))}
         </div>
       </div>
-    </>
-  );
-}
 
-function ConfigItem({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-white p-2">
-          <Icon className="size-4 text-slate-700" />
+      <div className="admin-panel p-5 lg:p-6">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">嵌入代码</p>
+        <h2 className="mt-1 text-xl font-semibold text-slate-900">把下面这段代码粘贴到 Shopify 商品模板的 Custom Liquid，并放在变体 / 颜色选择器上方</h2>
+        <pre className="mt-5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 p-5 text-sm leading-7 text-slate-100">
+          <code>{snippet}</code>
+        </pre>
+      </div>
+
+      <div className="admin-panel p-5 lg:p-6">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">多店铺 / 多商品类型提示词规则</p>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm font-semibold text-slate-900">当前店铺</p>
+            <p className="mt-2 break-all text-sm leading-7 text-slate-600">{shopDomain}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm font-semibold text-slate-900">提示词匹配方式</p>
+            <p className="mt-2 text-sm leading-7 text-slate-600">
+              前端会把 <span className="font-medium text-slate-900">shop_domain</span> 和 <span className="font-medium text-slate-900">product.type</span> 一起传给后端。
+              后端会按当前店铺、当前商品类型匹配对应提示词，所以不同店铺、不同商品类型可以使用不同提示词，而前端安装方式保持不变。
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="mt-1 break-all text-sm font-medium leading-6 text-slate-900">{value}</p>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="admin-panel p-5 lg:p-6">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">当前使用模型</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">{setting.activeModel}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">这里显示的是当前启用模型。模型不是写死的，后台管理员可随时切换。</p>
+        </div>
+
+        <div className="admin-panel p-5 lg:p-6">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">按钮文案</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">{setting.widgetButtonText}</p>
+        </div>
+
+        <div className="admin-panel p-5 lg:p-6">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">按钮颜色</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">{setting.widgetAccentColor}</p>
+        </div>
+
+        <div className="admin-panel p-5 lg:p-6">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">订单 webhook</p>
+          <p className="mt-2 break-all text-lg font-semibold text-slate-900">{appUrl}/api/shopify/orders</p>
         </div>
       </div>
     </div>
