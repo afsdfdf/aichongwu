@@ -65,8 +65,8 @@ export async function GET() {
 
   if (config.requireGeneration) setButtonLocked(true);
 
-  root.innerHTML = \
-    `<style>
+  root.innerHTML =
+    \`<style>
       #mm-root, #mm-modal { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       #mm-root * { box-sizing: border-box; }
       #mm-upload-btn,.mm-modal-box .mm-choose-btn,.mm-modal-box #mm-reupload-btn,.mm-modal-box #mm-confirm-btn,.mm-wizard-next,.mm-wizard-back { border-radius: 8px !important; }
@@ -248,7 +248,7 @@ export async function GET() {
           <a href="/account/login" class="mm-login-link">Already have an account? Log in</a>
         </div>
       </div>
-    </div>`;
+    </div>\`;
 
   const fileInput = root.querySelector("#mm-file-input");
   const uploadBtn = root.querySelector("#mm-upload-btn");
