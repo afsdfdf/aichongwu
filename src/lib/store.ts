@@ -747,6 +747,48 @@ export async function listGenerationRecords(shopDomain: string) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function getGenerationRecordById(generationId: string, shopDomain?: string) {
+  const state = await readStateFromS3();
+  return (
+    state.generations.find(
+      (item) => item.id === generationId && (!shopDomain || item.shopDomain === shopDomain),
+    ) ?? null
+  );
+}
+
+export async function updateGenerationResultData(input: {
+  generationId: string;
+  shopDomain: string;
+  sourceImageUrl?: string;
+  outputImageUrl?: string;
+  promptUsed?: string;
+  modelUsed?: string;
+  status: string;
+  metadata?: Record<string, unknown> | null;
+}) {
+  let updated = false;
+
+  await mutateState((state) => ({
+    ...state,
+    generations: state.generations.map((item) =>
+      item.id === input.generationId && item.shopDomain === input.shopDomain
+        ? ((updated = true), {
+            ...item,
+            sourceImageUrl: input.sourceImageUrl ?? item.sourceImageUrl,
+            outputImageUrl: input.outputImageUrl ?? item.outputImageUrl,
+            promptUsed: input.promptUsed ?? item.promptUsed,
+            modelUsed: input.modelUsed ?? item.modelUsed,
+            status: input.status,
+            metadata: input.metadata === undefined ? item.metadata : input.metadata,
+            updatedAt: nowIso(),
+          })
+        : item,
+    ),
+  }));
+
+  return updated;
+}
+
 export async function updateGenerationStatus(input: {
   generationId: string;
   shopDomain: string;
