@@ -73,20 +73,20 @@ export async function GET() {
       .product-form__buttons { margin-bottom: 24px !important; }
       .mm-trust-points { padding: 4px 0 16px; margin-top: -20px; }
       .mm-tp-item { display:flex; align-items:flex-start; gap:10px; padding:5px 0; font-size:14px; line-height:1.5; color:#6B5E54; }
-      .mm-tp-check { flex-shrink:0; width:20px; height:20px; background:${accentColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+      .mm-tp-check { flex-shrink:0; width:20px; height:20px; background:\${accentColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-top:1px; }
       .mm-tp-check svg { width:12px; height:12px; fill:none; stroke:#fff; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
       .mm-tp-item strong { font-weight:600; color:#1A1612; }
-      #mm-upload-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:${accentColor}; color:#fff; cursor:pointer; transition:opacity .2s; margin-bottom:0; }
+      #mm-upload-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:\${accentColor}; color:#fff; cursor:pointer; transition:opacity .2s; margin-bottom:0; }
       #mm-upload-btn:hover { opacity:0.9; }
       .mm-free-tag { background:#C8956C; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px; letter-spacing:.5px; text-transform:uppercase; line-height:1.3; flex-shrink:0; }
       .mm-social-proof { text-align:center; margin-top:8px; margin-bottom:8px; font-size:12px; color:#aaa; }
       .mm-mini-steps { display:flex; align-items:flex-start; gap:0; padding:16px 0; margin-bottom:16px; }
       .mm-mini-step { flex:1; text-align:center; position:relative; }
-      .mm-mini-step-num { width:28px; height:28px; background:${accentColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff; margin:0 auto 6px; }
+      .mm-mini-step-num { width:28px; height:28px; background:\${accentColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff; margin:0 auto 6px; }
       .mm-mini-step-label { font-size:11px; color:#6B5E54; line-height:1.35; font-weight:500; }
       .mm-mini-step:not(:last-child)::after { content:""; position:absolute; top:14px; right:-2px; width:16px; height:1px; background:#C8956C; }
       .mm-step-arrow { display:none; }
-      .mm-wizard-next { margin-top:12px; margin-bottom:16px; display:block; width:100%; padding:14px; font-size:15px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; border:none; background:${accentColor}; color:#fff; cursor:pointer; text-align:center; }
+      .mm-wizard-next { margin-top:12px; margin-bottom:16px; display:block; width:100%; padding:14px; font-size:15px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; border:none; background:\${accentColor}; color:#fff; cursor:pointer; text-align:center; }
       .mm-wizard-back { margin-bottom:12px; display:block; width:100%; padding:10px; font-size:14px; font-weight:600; border:1px solid #ccc; background:#fff; color:#1A1612; cursor:pointer; text-align:center; }
       .mm-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999; display:none; align-items:center; justify-content:center; padding:16px; }
       .mm-modal-box { background:#fff; border-radius:12px; max-width:1240px; width:96%; max-height:90vh; overflow-y:auto; padding:42px 52px; position:relative; }
@@ -98,7 +98,7 @@ export async function GET() {
       .mm-photo-tips ul { list-style:none; padding:0; margin:0; }
       .mm-photo-tips li { font-size:13px; color:#6B5E54; padding:3px 0; padding-left:20px; position:relative; line-height:1.5; }
       .mm-photo-tips li::before { content:"•"; position:absolute; left:6px; color:#4A6B4A; font-weight:700; }
-      .mm-choose-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:${accentColor}; color:#fff; cursor:pointer; border-radius:8px; }
+      .mm-choose-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:\${accentColor}; color:#fff; cursor:pointer; border-radius:8px; }
       #mm-images-row { display:flex; align-items:center; justify-content:space-between; gap:36px; margin-bottom:20px; }
       .mm-img-col { flex:0 0 300px; text-align:center; }
       .mm-img-col img { width:300px; max-width:300px; max-height:300px; object-fit:contain; border-radius:8px; display:block; margin:0 auto; }
@@ -124,7 +124,7 @@ export async function GET() {
       .mm-modal-actions { display:flex; justify-content:center; gap:16px; margin-top:22px; }
       .mm-modal-actions button { flex:0 0 auto; width:320px; max-width:42%; padding:14px 24px; font-size:14px; font-weight:600; border-radius:8px; cursor:pointer; }
       #mm-reupload-btn { background:#fff; border:1px solid #ccc; color:#1A1612; }
-      #mm-confirm-btn { background:${accentColor}; border:none; color:#fff; }
+      #mm-confirm-btn { background:\${accentColor}; border:none; color:#fff; }
       #mm-msg { text-align:center; padding:8px; border-radius:6px; font-size:13px; margin-top:8px; display:none; }
       #mm-msg.mm-err { background:#FEE; color:#C00; }
       #mm-msg.mm-ok { background:#EFE; color:#060; }
@@ -173,7 +173,7 @@ export async function GET() {
       <div id="mm-wrapper">
         <button type="button" id="mm-upload-btn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          ${buttonLabel}
+          \${buttonLabel}
           <span class="mm-free-tag">FREE PREVIEW</span>
         </button>
         <input type="file" id="mm-file-input" accept="image/jpeg,image/png,image/webp" style="display:none" />
