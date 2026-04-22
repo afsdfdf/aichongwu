@@ -51,81 +51,84 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="admin-panel p-5 lg:p-6">
+      <section className="admin-page-header">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Generations Gallery</p>
-            <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">效果图画廊</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="admin-page-header-kicker">Generations Gallery</p>
+            <h1 className="admin-page-header-title mt-2">效果图画廊</h1>
+            <p className="admin-page-header-description mt-2">
               默认显示效果图，支持查看原图、批量勾选下载与历史记录同步。
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <MetricCard label="当前结果数" value={filteredRows.length} />
-            <MetricCard label="已下单" value={orderedCount} />
-            <MetricCard label="待转化" value={filteredRows.length - orderedCount} />
+            <MetricCard label="当前结果数" value={filteredRows.length} note="按当前筛选条件统计" />
+            <MetricCard label="已下单" value={orderedCount} note="已关联订单的记录" />
+            <MetricCard label="待转化" value={filteredRows.length - orderedCount} note="尚未形成订单" />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="admin-panel p-4">
+      <div className="admin-panel p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-1.5">
+          <p className="text-sm font-semibold text-slate-900">筛选与同步</p>
+          <p className="admin-muted-note">支持按状态、商品类型、模型和关键词快速缩小结果范围。</p>
+        </div>
+
         <form className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="relative block sm:flex-1">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <label className="relative block lg:flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
                 name="q"
                 defaultValue={query}
                 placeholder="搜索邮箱 / 商品 / 提示词 / 订单号"
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none"
+                className="admin-field pl-11"
               />
             </label>
             <button
               type="submit"
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="admin-compact-button shrink-0 bg-slate-900 px-4 text-white hover:bg-slate-800"
             >
               <SlidersHorizontal className="size-4" />
-              筛选
+              应用筛选
             </button>
             <HistorySyncForm />
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <select
-              name="status"
-              defaultValue={params.status ?? ""}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
-            >
-              <option value="">全部状态</option>
-              <option value="ordered">已下单</option>
-              <option value="generated">仅已生成</option>
-            </select>
 
-            <select
-              name="productType"
-              defaultValue={params.productType ?? ""}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
-            >
-              <option value="">全部商品类型</option>
-              {productTypes.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <label>
+              <span className="admin-label">状态</span>
+              <select name="status" defaultValue={params.status ?? ""} className="admin-field">
+                <option value="">全部状态</option>
+                <option value="ordered">已下单</option>
+                <option value="generated">仅已生成</option>
+              </select>
+            </label>
 
-            <select
-              name="model"
-              defaultValue={params.model ?? ""}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
-            >
-              <option value="">全部模型</option>
-              {models.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            <label>
+              <span className="admin-label">商品类型</span>
+              <select name="productType" defaultValue={params.productType ?? ""} className="admin-field">
+                <option value="">全部商品类型</option>
+                {productTypes.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="admin-label">模型</span>
+              <select name="model" defaultValue={params.model ?? ""} className="admin-field">
+                <option value="">全部模型</option>
+                {models.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </form>
       </div>
@@ -139,11 +142,12 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function MetricCard({ label, value, note }: { label: string; value: number; note: string }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <article className="admin-soft-card px-4 py-3.5">
       <p className="text-sm text-slate-500">{label}</p>
       <h2 className="mt-1 text-2xl font-semibold text-slate-900">{value}</h2>
+      <p className="mt-1 text-xs text-slate-400">{note}</p>
     </article>
   );
 }

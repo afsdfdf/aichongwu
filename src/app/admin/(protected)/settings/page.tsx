@@ -9,13 +9,13 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <div className="admin-panel p-6 lg:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-400">Storage & Model Router</p>
-        <h1 className="mt-3 text-3xl font-semibold text-slate-900 lg:text-4xl">Unified model control center</h1>
-        <p className="mt-3 max-w-4xl text-base leading-7 text-slate-500 lg:text-lg">
-          Connect a provider, save credentials, detect supported models, and choose the default production model from one readable workspace. This page is intentionally larger so the full provider configuration is easy to review.
+      <section className="admin-page-header">
+        <p className="admin-page-header-kicker">Model Settings</p>
+        <h1 className="admin-page-header-title">模型与存储设置</h1>
+        <p className="admin-page-header-description">
+          统一管理模型服务商、接口地址、默认生产模型和测试工作区。只整理前台显示结构，底层字段、英文参数与保存逻辑保持不变。
         </p>
-      </div>
+      </section>
 
       <ModelSettingsForm
         activeModel={setting.activeModel}

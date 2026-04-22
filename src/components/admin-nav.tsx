@@ -57,17 +57,14 @@ export function AdminNav() {
 
   return (
     <aside className="admin-sidebar sticky top-0 h-screen overflow-hidden">
-      <div className="flex h-full flex-col px-4 py-6">
-        {/* ── Brand ── */}
-        <div className="px-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Merchant Console</p>
-          <h1 className="mt-1.5 text-lg font-bold text-slate-900">AI Preview</h1>
+      <div className="flex h-full flex-col px-4 py-5 lg:px-5 lg:py-6">
+        <div className="admin-soft-card px-4 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Merchant Console</p>
+          <h1 className="mt-2 text-lg font-bold text-slate-900">AI Preview</h1>
+          <p className="mt-1.5 text-xs leading-5 text-slate-500">统一管理生成记录、提示词、模型配置与交付文档。</p>
         </div>
 
-        <div className="mt-5 h-px bg-slate-200" />
-
-        {/* ── Nav ── */}
-        <nav className="mt-4 flex-1 space-y-1 overflow-auto">
+        <nav className="mt-5 flex-1 space-y-1.5 overflow-auto">
           {items.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
@@ -76,35 +73,36 @@ export function AdminNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                  active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                  "group flex items-start gap-3 rounded-2xl border px-3.5 py-3 text-sm transition",
+                  active
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900",
                 )}
               >
-                <Icon
+                <span
                   className={cn(
-                    "mt-0.5 size-4 shrink-0",
-                    active ? "text-white" : "text-slate-400",
+                    "mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-xl transition",
+                    active ? "bg-white/12 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-slate-900 group-hover:text-white",
                   )}
-                />
+                >
+                  <Icon className="size-4" />
+                </span>
                 <div className="min-w-0">
-                  <div>{item.label}</div>
-                  <div className={cn("mt-0.5 text-xs leading-4", active ? "text-slate-300" : "text-slate-400")}>
-                    {item.description}
-                  </div>
+                  <div className="font-semibold">{item.label}</div>
+                  <div className={cn("mt-1 text-xs leading-5", active ? "text-slate-300" : "text-slate-400")}>{item.description}</div>
                 </div>
               </Link>
             );
           })}
         </nav>
 
-        {/* ── Logout ── */}
         <button
           type="button"
           onClick={async () => {
             await fetch("/api/auth/logout", { method: "POST" });
             window.location.href = "/admin/login";
           }}
-          className="mt-4 flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          className="admin-soft-card mt-4 flex items-center gap-2 px-3.5 py-3 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-700"
         >
           <LogOut className="size-4" />
           退出登录

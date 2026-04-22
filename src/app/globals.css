@@ -76,6 +76,100 @@ textarea {
 .admin-panel {
   border: 1px solid var(--admin-border);
   background: var(--admin-surface);
+  border-radius: 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.admin-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--admin-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+  border-radius: 20px;
+  padding: 22px 24px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.admin-page-header-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.admin-page-header-title {
+  margin: 0;
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--admin-text);
+}
+
+.admin-page-header-description {
+  margin: 0;
+  max-width: 58rem;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--admin-muted);
+}
+
+.admin-soft-card {
   border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-soft);
+}
+
+.admin-field {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--admin-text);
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.admin-field:focus {
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.admin-field::placeholder {
+  color: #94a3b8;
+}
+
+.admin-textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.admin-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.admin-muted-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--admin-muted);
+}
+
+.admin-compact-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }

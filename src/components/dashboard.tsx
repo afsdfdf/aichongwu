@@ -54,34 +54,31 @@ export function DashboardHero({
   conversionRate: number;
 }) {
   return (
-    <section className="admin-panel p-5 lg:p-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
-            Merchant Intelligence
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900 lg:text-3xl">Shopify AI 商品效果图后台</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            当前店铺 <span className="font-medium text-slate-900">{shopDomain}</span> 正在使用{" "}
-            <span className="font-medium text-slate-900">{activeModel}</span> 处理生成任务，当前转化率为{" "}
-            <span className="font-medium text-slate-900">{conversionRate}%</span>。
-          </p>
+    <section className="admin-page-header lg:flex-row lg:items-end lg:justify-between lg:gap-6">
+      <div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          Merchant Intelligence
         </div>
+        <h1 className="admin-page-header-title mt-3">Shopify AI 商品效果图后台</h1>
+        <p className="admin-page-header-description mt-3">
+          当前店铺 <span className="font-semibold text-slate-900">{shopDomain}</span> 正在使用 <span className="font-semibold text-slate-900">{activeModel}</span>
+          处理生成任务，当前转化率为 <span className="font-semibold text-slate-900">{conversionRate}%</span>。
+        </p>
+      </div>
 
-        <div className="flex shrink-0 gap-3">
-          <Link
-            href="/admin/generations"
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-          >
-            查看生成记录 <ArrowRight className="size-4" />
-          </Link>
-          <Link
-            href="/admin/preview"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
-          >
-            打开功能预览
-          </Link>
-        </div>
+      <div className="flex shrink-0 flex-wrap gap-3">
+        <Link
+          href="/admin/generations"
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+        >
+          查看生成记录 <ArrowRight className="size-4" />
+        </Link>
+        <Link
+          href="/admin/preview"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
+        >
+          打开功能预览
+        </Link>
       </div>
     </section>
   );

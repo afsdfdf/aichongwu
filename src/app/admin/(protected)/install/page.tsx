@@ -42,20 +42,21 @@ export default async function InstallPage() {
   const snippet = getSnippet(appUrl);
 
   return (
-    <div className="space-y-5">
-      <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Shopify 安装文档</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">按文档顺序交付给客户的安装说明</h1>
-        <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
-          这个页面用于直接交付客户。页面说明保持中文，方便客户按步骤安装；代码块保持英文，不改变 Shopify 接入代码结构，只接入我们的服务地址。
+    <div className="space-y-4">
+      <section className="admin-page-header">
+        <p className="admin-page-header-kicker">Shopify 安装文档</p>
+        <h1 className="admin-page-header-title">按文档顺序交付给客户的安装说明</h1>
+        <p className="admin-page-header-description">
+          这个页面用于直接交付客户。页面说明保持中文，代码块保持英文，不改变 Shopify 接入代码结构，只统一后台外层版式。
         </p>
-      </div>
+      </section>
 
       <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">文档顺序</p>
+        <p className="admin-page-header-kicker">文档顺序</p>
+        <h2 className="mt-2 text-xl font-semibold text-slate-900">客户安装步骤</h2>
         <div className="mt-4 space-y-3">
           {documentSteps.map((step, index) => (
-            <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div key={step} className="admin-soft-card px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Step {index + 1}</p>
               <p className="mt-2 text-sm leading-7 text-slate-900">{step}</p>
             </div>

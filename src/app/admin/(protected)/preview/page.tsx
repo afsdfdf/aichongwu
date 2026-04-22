@@ -33,21 +33,22 @@ export default async function PreviewPage() {
   const { setting } = await getStoreContext(getDefaultShopDomain());
 
   return (
-    <div className="space-y-5">
-      <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Function Preview</p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">Store module preview</h1>
-        <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
-          This page follows the upload module document order. Each plugin is shown one by one first, then the full storefront
-          module is shown in the same top-to-bottom sequence for client delivery.
+    <div className="space-y-4">
+      <section className="admin-page-header">
+        <p className="admin-page-header-kicker">Function Preview</p>
+        <h1 className="admin-page-header-title">店铺模块预览</h1>
+        <p className="admin-page-header-description">
+          这一页按上传模块文档顺序展示。仅统一后台外层壳的头部与节奏，内部前台展示样式、品牌配色与交互结构保持原样。
         </p>
-      </div>
+      </section>
 
       <div className="admin-panel p-5 lg:p-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Plugin Order</p>
+        <p className="admin-page-header-kicker">Plugin Order</p>
+        <h2 className="mt-2 text-xl font-semibold text-slate-900">模块展示顺序</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">先逐个展示插件，再按最终 storefront 的自上而下顺序展示完整模块，便于客户确认交付内容。</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {pluginList.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div key={item.id} className="admin-soft-card px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Plugin {item.id}</p>
               <p className="mt-2 text-base font-semibold text-slate-900">{item.title}</p>
               <p className="mt-1 text-sm leading-6 text-slate-500">{item.note}</p>
