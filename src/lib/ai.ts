@@ -83,7 +83,7 @@ async function normalizeRemoteImage(result: ProviderImageResult) {
   throw new Error("Provider did not return an image");
 }
 
-async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, baseURL?: string) {
+async function generateWithOpenAIEdit(input: GenerateInput, modelName: string, apiKey: string, baseURL?: string) {
   const client = new OpenAI({ apiKey, baseURL });
 
   if (input.sourceImageBuffer && input.sourceImageContentType) {
@@ -92,7 +92,7 @@ async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, base
     });
 
     const result = await client.images.edit({
-      model: "gpt-image-1",
+      model: modelName as "gpt-image-1",
       image: file,
       prompt: input.prompt,
       size: "1024x1024",
@@ -113,7 +113,7 @@ async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, base
   }
 
   const result = await client.images.generate({
-    model: "gpt-image-1",
+    model: modelName as "gpt-image-1",
     prompt: input.prompt,
     size: "1024x1024",
   });
@@ -414,17 +414,31 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
 }
 
 async function generateWithGemini(input: GenerateInput, endpointUrl: string, apiKey: string) {
-  ensureImageAwareAdapter("gemini", "Gemini", input);
-  const url = `${endpointUrl}${endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`;
+  const isOfficialGoogleEndpoint = endpointUrl.includes("generativelanguage.googleapis.com");
+  const url = isOfficialGoogleEndpoint
+    ? `${endpointUrl}${endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`
+    : endpointUrl;
+
+  const parts: Array<Record<string, unknown>> = [{ text: input.prompt }];
+  if (hasSourceImage(input)) {
+    parts.push({
+      inline_data: {
+        mime_type: input.sourceImageContentType || "image/png",
+        data: sourceImageBase64(input),
+      },
+    });
+  }
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(isOfficialGoogleEndpoint ? {} : { Authorization: `Bearer ${apiKey}` }),
     },
     body: JSON.stringify({
       contents: [
         {
-          parts: [{ text: input.prompt }],
+          parts,
         },
       ],
     }),
@@ -439,22 +453,29 @@ async function generateWithGemini(input: GenerateInput, endpointUrl: string, api
       content?: {
         parts?: Array<{
           inlineData?: { data?: string; mimeType?: string };
+          inline_data?: { data?: string; mimeType?: string; mime_type?: string };
         }>;
       };
     }>;
   };
 
-  const inlineData = payload.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+  const imagePart = payload.candidates?.[0]?.content?.parts?.find(
+    (part) => part.inlineData || part.inline_data,
+  );
+  const inlineData = (imagePart?.inlineData || imagePart?.inline_data) as
+    | { data?: string; mimeType?: string; mime_type?: string }
+    | undefined;
   if (!inlineData?.data) {
     throw new Error("Gemini did not return inline image data");
   }
 
   return {
     outputBuffer: Buffer.from(inlineData.data, "base64"),
-    contentType: inlineData.mimeType || "image/png",
+    contentType: inlineData.mimeType || inlineData.mime_type || "image/png",
     metadata: {
       provider: "gemini",
-      sourceImageForwarded: false,
+      sourceImageForwarded: hasSourceImage(input),
+      endpointMode: isOfficialGoogleEndpoint ? "google-query-key" : "proxy-bearer",
     },
   };
 }
@@ -750,7 +771,12 @@ async function runProviderImageGeneration(input: GenerateInput) {
 
   switch (option.adapter as ModelAdapter) {
     case "openai-edit":
-      return generateWithOpenAIEdit(input, ensureConfigured(apiKey, "OpenAI API Key"), baseUrl);
+      return generateWithOpenAIEdit(
+        input,
+        modelName,
+        ensureConfigured(apiKey, "OpenAI API Key"),
+        baseUrl,
+      );
     case "openai-images":
       return generateWithOpenAIImages(
         input,
@@ -794,7 +820,8 @@ export async function generatePreviewImage(input: GenerateInput) {
         provider.key !== primaryKey &&
         provider.isEnabled &&
         provider.hasApiKey &&
-        provider.option?.supportsPreviewGeneration,
+        provider.option?.supportsPreviewGeneration &&
+        (provider.option?.adapter === "openai-edit" || provider.option?.adapter === "custom"),
     )
     .map((provider) => provider.key);
 
@@ -824,6 +851,12 @@ export async function generatePreviewImage(input: GenerateInput) {
 
   if (!generated) {
     throw lastError ?? new Error("All configured models failed");
+  }
+
+  if (hasSourceImage(input) && !generated.metadata?.sourceImageForwarded) {
+    throw new Error(
+      "This storefront flow requires image-to-image generation. The current model path did not forward the uploaded source image upstream, so generation was blocked.",
+    );
   }
 
   const uploaded = await uploadBufferToS3({
