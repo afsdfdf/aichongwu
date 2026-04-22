@@ -9,7 +9,7 @@ import { getDashboardData } from "@/lib/dashboard";
 import { getStoreContext } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 export default async function AdminDashboardPage() {
   const shopDomain = getDefaultShopDomain();
@@ -30,7 +30,7 @@ export default async function AdminDashboardPage() {
 
       <TrendPanel summary={dashboard.summary} trend={dashboard.trend} />
 
-      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <RecentActivityPanel
           rows={dashboard.recent.slice(0, 6)}
           title="最近生成"

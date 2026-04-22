@@ -10,6 +10,7 @@ type GenerateInput = {
   sourceImageContentType?: string;
   sourceImageUrl?: string;
   productType?: string;
+  aspectRatio?: string;
 };
 
 type ProviderImageResult = {
@@ -26,10 +27,15 @@ async function resolveProvider(modelKey: string) {
   }
 
   const provider = await getProviderConfigByKey(modelKey);
+  // v3 returns fullEndpoint (base + path combined), prefer it over webhookUrl
+  const endpointUrl = (provider as Record<string, unknown> | null)?.fullEndpoint as string | undefined
+    || provider?.webhookUrl
+    || option.defaultEndpoint
+    || "";
   return {
     option,
     provider,
-    endpointUrl: provider?.webhookUrl || option.defaultEndpoint || "",
+    endpointUrl,
     apiKey: provider?.apiKey || null,
     baseUrl: provider?.baseUrl || undefined,
     modelName: provider?.modelName || option.modelName,
@@ -107,12 +113,26 @@ async function generateWithOpenAIEdit(input: GenerateInput, apiKey: string, base
   });
 }
 
+function mapAspectRatioToSize(ar: string | undefined): string {
+  switch (ar) {
+    case "1:1": return "1024x1024";
+    case "4:3": return "1024x768";
+    case "3:4": return "768x1024";
+    case "16:9": return "1024x576";
+    case "9:16": return "576x1024";
+    case "3:2": return "1024x683";
+    case "2:3": return "683x1024";
+    default: return "1024x1024";
+  }
+}
+
 async function generateWithOpenAIImages(input: GenerateInput, modelName: string, apiKey: string, baseURL?: string) {
   const client = new OpenAI({ apiKey, baseURL });
+  const size = mapAspectRatioToSize(input.aspectRatio);
   const result = await client.images.generate({
     model: modelName as "dall-e-3",
     prompt: input.prompt,
-    size: "1024x1024",
+    size: size as "1024x1024",
   });
   const image = result.data?.[0];
   if (!image) throw new Error("OpenAI returned no image");
@@ -127,6 +147,65 @@ async function generateWithOpenAIImages(input: GenerateInput, modelName: string,
 }
 
 async function generateWithStability(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  // v2beta endpoints use multipart/form-data, v1 endpoints use JSON
+  const isV2 = endpointUrl.includes("/v2beta/");
+
+  if (isV2) {
+    const formData = new FormData();
+    formData.append("prompt", input.prompt);
+    formData.append("output_format", "png");
+
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`Stability v2 request failed: ${response.status} ${errorText}`);
+    }
+
+    // v2 returns image directly as binary or as JSON with base64
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("image/")) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return {
+        outputBuffer: buffer,
+        contentType,
+        metadata: { provider: "stability-v2" },
+      };
+    }
+
+    const payload = (await response.json()) as {
+      image?: string;
+      artifacts?: Array<{ base64?: string; seed?: number }>;
+    };
+
+    if (payload.image) {
+      return {
+        outputBuffer: Buffer.from(payload.image, "base64"),
+        contentType: "image/png",
+        metadata: { provider: "stability-v2" },
+      };
+    }
+
+    const artifact = payload.artifacts?.[0];
+    if (artifact?.base64) {
+      return {
+        outputBuffer: Buffer.from(artifact.base64, "base64"),
+        contentType: "image/png",
+        metadata: { provider: "stability-v2", seed: artifact.seed ?? null },
+      };
+    }
+
+    throw new Error("Stability v2 returned no image data");
+  }
+
+  // Legacy v1 API
   const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
@@ -166,7 +245,11 @@ async function generateWithStability(input: GenerateInput, endpointUrl: string, 
 }
 
 async function pollReplicate(getUrl: string, apiKey: string) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  // Vercel hobby=10s, pro=60s, enterprise=300s — stay well under limits
+  const MAX_ATTEMPTS = 25; // 25 × 2s = 50s max polling
+  const POLL_INTERVAL_MS = 2000;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const response = await fetch(getUrl, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -188,10 +271,10 @@ async function pollReplicate(getUrl: string, apiKey: string) {
       throw new Error(payload.error || `Replicate status: ${payload.status}`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
-  throw new Error("Replicate polling timed out");
+  throw new Error("Replicate polling timed out (50s). The model may still be processing — check your Replicate dashboard.");
 }
 
 async function generateWithReplicate(input: GenerateInput, endpointUrl: string, apiKey: string) {
@@ -227,6 +310,81 @@ async function generateWithReplicate(input: GenerateInput, endpointUrl: string, 
       provider: "replicate",
     },
   });
+}
+
+async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  // fal.ai uses Key prefix (not Bearer) and async queue model
+  const submitUrl = endpointUrl;
+
+  const response = await fetch(submitUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: input.prompt,
+      image_size: "square_hd",
+      num_inference_steps: 28,
+      guidance_scale: 3.5,
+      num_images: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`fal.ai request failed: ${response.status} ${errorText}`);
+  }
+
+  const payload = (await response.json()) as {
+    images?: Array<{ url?: string }>;
+    request_id?: string;
+    status?: string;
+  };
+
+  // Synchronous response — images returned directly
+  if (payload.images?.[0]?.url) {
+    return normalizeRemoteImage({
+      imageUrl: payload.images[0].url,
+      metadata: { provider: "fal-queue", requestId: payload.request_id ?? null },
+    });
+  }
+
+  // Async queue — poll for result
+  const requestId = payload.request_id;
+  if (!requestId) {
+    throw new Error("fal.ai returned no images and no request_id for polling");
+  }
+
+  const MAX_POLL_ATTEMPTS = 25;
+  const POLL_INTERVAL_MS = 2000;
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    const statusUrl = `${submitUrl}/requests/${requestId}`;
+    const statusResp = await fetch(statusUrl, {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
+
+    const statusPayload = (await statusResp.json()) as {
+      status?: string;
+      output?: { images?: Array<{ url?: string }> };
+    };
+
+    if (statusPayload.status === "COMPLETED" && statusPayload.output?.images?.[0]?.url) {
+      return normalizeRemoteImage({
+        imageUrl: statusPayload.output.images[0].url,
+        metadata: { provider: "fal-queue", requestId },
+      });
+    }
+
+    if (statusPayload.status === "FAILED") {
+      throw new Error("fal.ai generation failed");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+
+  throw new Error("fal.ai polling timed out (50s). Check your fal.ai dashboard for the result.");
 }
 
 async function generateWithGemini(input: GenerateInput, endpointUrl: string, apiKey: string) {
@@ -271,6 +429,95 @@ async function generateWithGemini(input: GenerateInput, endpointUrl: string, api
       provider: "gemini",
     },
   };
+}
+
+/**
+ * OpenAI Chat Completions image generation adapter.
+ * Used by aggregator proxies (e.g. PoloAI) that expose image models
+ * through the /v1/chat/completions endpoint. The response contains
+ * images embedded as markdown in the content field:
+ *   - base64:  ![image](data:image/png;base64,...)
+ *   - url:     ![None](https://...)
+ */
+async function generateWithOpenAIChatImage(
+  input: GenerateInput,
+  modelName: string,
+  apiKey: string,
+  baseURL?: string,
+) {
+  const client = new OpenAI({ apiKey, baseURL });
+
+  // Build prompt with aspect ratio hint
+  let userPrompt = input.prompt;
+  if (input.aspectRatio && input.aspectRatio !== "1:1") {
+    userPrompt = `[Aspect ratio: ${input.aspectRatio}] ${userPrompt}`;
+  }
+
+  const result = await client.chat.completions.create({
+    model: modelName,
+    messages: [
+      {
+        role: "user",
+        content: userPrompt,
+      },
+    ],
+    max_tokens: 4096,
+  });
+
+  const content = result.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("Chat completions returned no content");
+  }
+
+  // ── Extract image from markdown ──
+  // Pattern 1: base64 data URI  ![alt](data:image/png;base64,XXXXXX)
+  const base64Match = content.match(
+    /!\[.*?\]\(data:(image\/[a-zA-Z+]+);base64,([A-Za-z0-9+/=]+)\)/,
+  );
+  if (base64Match) {
+    const mimeType = base64Match[1];
+    const base64Data = base64Match[2];
+    return {
+      outputBuffer: Buffer.from(base64Data, "base64"),
+      contentType: mimeType,
+      metadata: {
+        provider: "openai-chat-image",
+        model: result.model,
+        usage: result.usage ?? null,
+      },
+    };
+  }
+
+  // Pattern 2: regular URL  ![alt](https://...)
+  const urlMatch = content.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+  if (urlMatch) {
+    const imageUrl = urlMatch[1];
+    return normalizeRemoteImage({
+      imageUrl,
+      metadata: {
+        provider: "openai-chat-image",
+        model: result.model,
+        usage: result.usage ?? null,
+      },
+    });
+  }
+
+  // Pattern 3: bare URL (some proxies just return the URL as content)
+  const bareUrlMatch = content.match(/^(https?:\/\/\S+\.(png|jpg|jpeg|webp|gif)\S*)$/i);
+  if (bareUrlMatch) {
+    return normalizeRemoteImage({
+      imageUrl: bareUrlMatch[1],
+      metadata: {
+        provider: "openai-chat-image",
+        model: result.model,
+        usage: result.usage ?? null,
+      },
+    });
+  }
+
+  throw new Error(
+    `Chat completions response did not contain a recognizable image. Content preview: ${content.substring(0, 200)}`,
+  );
 }
 
 async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
@@ -378,6 +625,13 @@ async function runProviderImageGeneration(input: GenerateInput) {
         ensureConfigured(apiKey, "OpenAI API Key"),
         baseUrl,
       );
+    case "openai-chat-image":
+      return generateWithOpenAIChatImage(
+        input,
+        modelName,
+        ensureConfigured(apiKey, "Chat Image API Key"),
+        baseUrl,
+      );
     case "stability":
       return generateWithStability(input, ensureConfigured(endpointUrl, "Stability 端点"), ensureConfigured(apiKey, "Stability API Key"));
     case "replicate":
@@ -388,8 +642,11 @@ async function runProviderImageGeneration(input: GenerateInput) {
       return generateWithCustom(input, ensureConfigured(endpointUrl, "自定义 API 端点"), apiKey);
     case "midjourney-async":
     case "dashscope-async":
+    case "volcengine-async":
     case "xfyun-async":
       throw new Error(`${option.label} 多数为异步任务型接口，当前支持配置校验，不支持即时生图测试。`);
+    case "fal-queue":
+      return generateWithFalQueue(input, ensureConfigured(endpointUrl, "fal.ai 端点"), ensureConfigured(apiKey, "fal.ai API Key"));
     default:
       throw new Error(`Unsupported adapter: ${option.adapter}`);
   }
@@ -452,10 +709,19 @@ export async function generatePreviewImage(input: GenerateInput) {
   };
 }
 
-export async function generateTestImage(params: { modelKey: string; prompt: string }) {
+export async function generateTestImage(params: {
+  modelKey: string;
+  prompt: string;
+  sourceImageBuffer?: Buffer;
+  sourceImageContentType?: string;
+  aspectRatio?: string;
+}) {
   const generated = await runProviderImageGeneration({
     modelKey: params.modelKey,
     prompt: params.prompt,
+    sourceImageBuffer: params.sourceImageBuffer,
+    sourceImageContentType: params.sourceImageContentType,
+    aspectRatio: params.aspectRatio,
   });
 
   const uploaded = await uploadBufferToS3({
@@ -482,7 +748,9 @@ export async function validateProviderSetup(modelKey: string) {
             ? apiKey
             : endpointUrl,
     ),
-    message: `${option.label} 配置已读取`,
+    message: option.adapter === "openai-chat-image"
+      ? `${option.label} — Chat Completions 模式，需 API Key${baseUrl ? "，Base URL: " + baseUrl : ""}`
+      : `${option.label} 配置已读取`,
     option,
     endpointUrl,
     hasApiKey: Boolean(apiKey),

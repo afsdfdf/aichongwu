@@ -38,6 +38,9 @@ export async function POST(request: Request) {
   if (!ids.length) {
     return NextResponse.json({ message: "请选择至少一条记录" }, { status: 400 });
   }
+  if (ids.length > 30) {
+    return NextResponse.json({ message: "单次最多下载 30 条记录，请减少选择" }, { status: 400 });
+  }
 
   const rows = await listGenerationRecords(getDefaultShopDomain());
   const selected = rows.filter((item) => ids.includes(item.id));

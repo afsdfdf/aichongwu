@@ -73,7 +73,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
         <div className="flex items-center gap-3">
           <label className="inline-flex items-center gap-2">
             <input
@@ -100,7 +100,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
             type="button"
             onClick={downloadSelected}
             disabled={!selectedIds.length || downloading}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Download className="size-4" />
             {downloading ? "打包中..." : `下载选中 (${selectedIds.length})`}
@@ -117,13 +117,13 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
         {pagedRows.map((item) => {
           const checked = selectedIds.includes(item.id);
           return (
             <div
               key={item.id}
-              className="overflow-hidden rounded-[18px] border border-[#dbe3ef] bg-white text-left shadow-[0_6px_20px_rgba(15,23,42,0.05)]"
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm"
             >
               <div className="flex items-center justify-between px-3 pb-2 pt-3">
                 <input
@@ -150,7 +150,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                   <img
                     src={item.outputImageUrl}
                     alt={item.productTitle || item.productType}
-                    className="aspect-square w-full rounded-[14px] object-cover"
+                    className="aspect-square w-full rounded-lg object-cover"
                   />
                 </div>
 
@@ -187,31 +187,31 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
 
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/68 px-4 py-8 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1220] shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
               <div>
                 <p className="text-sm text-slate-400">图片预览</p>
-                <h2 className="mt-1 text-xl font-semibold text-white">
+                <h2 className="mt-1 text-lg font-semibold text-white">
                   {selected.productTitle || selected.productType}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedId(null)}
-                className="rounded-2xl border border-white/10 p-3 text-slate-300 transition hover:bg-white/5"
+                className="rounded-lg border border-white/10 p-2.5 text-slate-300 transition hover:bg-white/5"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="grid max-h-[calc(92vh-88px)] gap-0 overflow-auto xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="grid max-h-[calc(92vh-80px)] gap-0 overflow-auto xl:grid-cols-[1.15fr_0.85fr]">
               <div className="border-b border-white/10 p-5 xl:border-b-0 xl:border-r">
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setActiveTab("result")}
                     className={cn(
-                      "rounded-full px-4 py-2 text-sm transition",
+                      "rounded-lg px-4 py-2 text-sm transition",
                       activeTab === "result"
                         ? "bg-sky-400 text-slate-950"
                         : "border border-white/10 text-slate-300 hover:bg-white/5",
@@ -223,7 +223,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                     type="button"
                     onClick={() => setActiveTab("source")}
                     className={cn(
-                      "rounded-full px-4 py-2 text-sm transition",
+                      "rounded-lg px-4 py-2 text-sm transition",
                       activeTab === "source"
                         ? "bg-white text-slate-950"
                         : "border border-white/10 text-slate-300 hover:bg-white/5",
@@ -233,11 +233,11 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                   </button>
                 </div>
 
-                <div className="overflow-hidden rounded-[24px] bg-white/[0.04] p-3">
+                <div className="overflow-hidden rounded-xl bg-white/[0.04] p-3">
                   <img
                     src={activeTab === "result" ? selected.outputImageUrl : selected.sourceImageUrl}
                     alt={selected.productTitle || selected.productType}
-                    className="aspect-square w-full rounded-[20px] object-cover"
+                    className="aspect-square w-full rounded-lg object-cover"
                   />
                 </div>
 
@@ -250,10 +250,10 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
               <div className="space-y-4 p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill status={selected.orderId ? "ordered" : selected.status} />
-                  <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-slate-300">
+                  <span className="rounded-lg bg-white/8 px-3 py-1 text-xs text-slate-300">
                     {selected.productType}
                   </span>
-                  <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-slate-300">
+                  <span className="rounded-lg bg-white/8 px-3 py-1 text-xs text-slate-300">
                     {selected.modelUsed}
                   </span>
                 </div>
@@ -263,7 +263,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                 <InfoBlock label="订单号" value={selected.orderName || "尚未关联订单"} />
                 <InfoBlock label="Generation ID" value={selected.id} mono />
 
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm text-slate-500">提示词</p>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-200">
                     {selected.promptUsed}
@@ -293,7 +293,7 @@ function PageButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm transition",
+        "inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm transition",
         disabled
           ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
           : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
@@ -310,7 +310,7 @@ function LinkTile({ label, url }: { label: string; url: string }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center justify-between rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 transition hover:bg-white/[0.05]"
+      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 transition hover:bg-white/[0.05]"
     >
       <span>{label}</span>
       <ExternalLink className="size-4 text-slate-400" />
@@ -328,7 +328,7 @@ function InfoBlock({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-sm text-slate-500">{label}</p>
       <p className={cn("mt-2 break-all text-sm leading-7 text-slate-200", mono && "font-mono")}>{value}</p>
     </div>

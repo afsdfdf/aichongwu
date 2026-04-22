@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
+// Module-level singleton — reuses TCP connection pool across requests
+let s3ClientSingleton: S3Client | null = null;
+
 export function getS3Client() {
   const region = process.env.S3_REGION;
   const accessKeyId = process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
@@ -10,13 +13,17 @@ export function getS3Client() {
     throw new Error("Missing S3 credentials");
   }
 
-  return new S3Client({
-    region,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
+  if (!s3ClientSingleton) {
+    s3ClientSingleton = new S3Client({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+  }
+
+  return s3ClientSingleton;
 }
 
 export function getS3Bucket() {

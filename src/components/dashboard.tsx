@@ -43,6 +43,7 @@ type DashboardRecent = {
   createdAt: string | Date;
 };
 
+/* ── Hero Banner ── */
 export function DashboardHero({
   shopDomain,
   activeModel,
@@ -53,30 +54,30 @@ export function DashboardHero({
   conversionRate: number;
 }) {
   return (
-    <section className="admin-panel p-6">
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr] xl:items-center">
+    <section className="admin-panel p-5 lg:p-6">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] uppercase tracking-[0.24em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
             Merchant Intelligence
           </div>
-          <h1 className="mt-4 text-3xl font-semibold text-slate-900">Shopify AI 商品效果图后台</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
+          <h1 className="mt-3 text-2xl font-semibold text-slate-900 lg:text-3xl">Shopify AI 商品效果图后台</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             当前店铺 <span className="font-medium text-slate-900">{shopDomain}</span> 正在使用{" "}
             <span className="font-medium text-slate-900">{activeModel}</span> 处理生成任务，当前转化率为{" "}
             <span className="font-medium text-slate-900">{conversionRate}%</span>。
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3 xl:justify-end">
+        <div className="flex shrink-0 gap-3">
           <Link
             href="/admin/generations"
-            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
           >
             查看生成记录 <ArrowRight className="size-4" />
           </Link>
           <Link
             href="/admin/preview"
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
           >
             打开功能预览
           </Link>
@@ -86,6 +87,7 @@ export function DashboardHero({
   );
 }
 
+/* ── KPI Cards ── */
 export function KpiGrid({
   summary,
   promptCount,
@@ -103,21 +105,21 @@ export function KpiGrid({
   ];
 
   return (
-    <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+    <section className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
       {items.map((item) => {
         const Icon = item.icon;
         return (
-          <article key={item.label} className="admin-panel p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs text-slate-500">{item.label}</p>
-                <h3 className="mt-2 text-3xl font-semibold text-slate-900">{item.value}</h3>
+          <article key={item.label} className="admin-panel p-4 lg:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-xs text-slate-500">{item.label}</p>
+                <h3 className="mt-1.5 text-2xl font-semibold text-slate-900">{item.value}</h3>
               </div>
-              <div className="rounded-xl bg-slate-100 p-2.5">
-                <Icon className="size-4 text-slate-700" />
+              <div className="shrink-0 rounded-lg bg-slate-100 p-2">
+                <Icon className="size-4 text-slate-600" />
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">{item.meta}</p>
+            <p className="mt-2 text-xs text-slate-400">{item.meta}</p>
           </article>
         );
       })}
@@ -125,6 +127,7 @@ export function KpiGrid({
   );
 }
 
+/* ── 7-Day Trend ── */
 export function TrendPanel({
   summary,
   trend,
@@ -135,30 +138,29 @@ export function TrendPanel({
   const max = Math.max(...trend.map((item) => item.value), 1);
 
   return (
-    <section className="admin-panel p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="admin-panel p-5 lg:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.25em] text-slate-400">7-Day Trend</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">最近 7 天生成趋势</h2>
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">7-Day Trend</p>
+          <h2 className="mt-1.5 text-lg font-semibold text-slate-900 lg:text-xl">最近 7 天生成趋势</h2>
           <p className="mt-1 text-sm text-slate-500">
             平均每日 {summary.averageDaily} 次生成，环比上周{" "}
             <span className={cn("font-medium", summary.weekOverWeek >= 0 ? "text-emerald-600" : "text-rose-600")}>
               {summary.weekOverWeek >= 0 ? "+" : ""}
               {summary.weekOverWeek}%
             </span>
-            。
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+        <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
           当前待转化：{summary.pendingCount}
         </div>
       </div>
 
-      <div className="mt-6 grid h-[190px] grid-cols-7 items-end gap-3">
+      <div className="mt-5 grid h-[140px] grid-cols-7 items-end gap-2 lg:h-[180px] lg:gap-3">
         {trend.map((point) => {
           const height = `${Math.max(12, Math.round((point.value / max) * 100))}%`;
           return (
-            <div key={point.label} className="flex h-full flex-col items-center justify-end gap-2">
+            <div key={point.label} className="flex h-full flex-col items-center justify-end gap-1.5">
               <div className="text-[11px] text-slate-400">{point.value}</div>
               <div className="relative flex h-full w-full items-end justify-center rounded-md bg-slate-100 p-1">
                 <div className="w-full rounded-sm bg-[linear-gradient(180deg,#60a5fa_0%,#2563eb_100%)]" style={{ height }} />
@@ -178,6 +180,7 @@ export function TrendPanel({
   );
 }
 
+/* ── Breakdown Cards ── */
 export function BreakdownPanels({
   productBreakdown,
   modelBreakdown,
@@ -186,7 +189,7 @@ export function BreakdownPanels({
   modelBreakdown: BreakdownItem[];
 }) {
   return (
-    <section className="grid gap-5 xl:grid-cols-2">
+    <section className="grid gap-4 lg:grid-cols-2">
       <BreakdownCard title="商品类型分布" description="查看哪些商品类型的 AI 预览需求更高。" items={productBreakdown} />
       <BreakdownCard title="模型使用分布" description="对比当前默认模型与历史记录的分布情况。" items={modelBreakdown} />
     </section>
@@ -203,15 +206,15 @@ function BreakdownCard({
   items: BreakdownItem[];
 }) {
   return (
-    <article className="admin-panel p-5">
-      <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
-      <div className="mt-4 space-y-3">
+    <article className="admin-panel p-5 lg:p-6">
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      <p className="mt-0.5 text-sm text-slate-500">{description}</p>
+      <div className="mt-4 space-y-2.5">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">暂无数据。</div>
+          <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">暂无数据。</div>
         ) : (
           items.slice(0, 5).map((item) => (
-            <div key={item.label} className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={item.label} className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-slate-900">{item.label}</p>
@@ -219,8 +222,8 @@ function BreakdownCard({
                 </div>
                 <span className="text-sm text-slate-700">{item.share}%</span>
               </div>
-              <div className="h-2 rounded-full bg-slate-200">
-                <div className="h-2 rounded-full bg-[linear-gradient(90deg,#60a5fa_0%,#10b981_100%)]" style={{ width: `${Math.max(5, item.share)}%` }} />
+              <div className="h-1.5 rounded-full bg-slate-200">
+                <div className="h-1.5 rounded-full bg-[linear-gradient(90deg,#60a5fa_0%,#10b981_100%)]" style={{ width: `${Math.max(5, item.share)}%` }} />
               </div>
             </div>
           ))
@@ -230,6 +233,7 @@ function BreakdownCard({
   );
 }
 
+/* ── Recent Activity ── */
 export function RecentActivityPanel({
   rows,
   title,
@@ -240,30 +244,30 @@ export function RecentActivityPanel({
   description: string;
 }) {
   return (
-    <article className="admin-panel p-5">
+    <article className="admin-panel p-5 lg:p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          <p className="mt-0.5 text-sm text-slate-500">{description}</p>
         </div>
-        <Link href="/admin/generations" className="text-sm text-sky-600">
+        <Link href="/admin/generations" className="shrink-0 text-sm text-sky-600">
           查看全部
         </Link>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">暂无记录。</div>
+          <div className="col-span-full rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">暂无记录。</div>
         ) : (
           rows.map((item) => (
-            <div key={item.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3">
-              <img src={item.outputImageUrl} alt={item.productType} className="aspect-square w-full rounded-2xl object-cover" />
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <img src={item.outputImageUrl} alt={item.productType} className="aspect-square w-full rounded-lg object-cover" />
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <StatusPill status={item.orderId ? "ordered" : item.status} />
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-500">{item.modelUsed}</span>
+                <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] text-slate-500">{item.modelUsed}</span>
               </div>
-              <h3 className="mt-3 line-clamp-1 text-sm font-medium text-slate-900">{item.productTitle || item.productType}</h3>
-              <p className="mt-1 line-clamp-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
+              <h3 className="mt-2 line-clamp-1 text-sm font-medium text-slate-900">{item.productTitle || item.productType}</h3>
+              <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
             </div>
           ))
         )}
@@ -283,5 +287,5 @@ export function StatusPill({ status }: { status: string }) {
 
   const label = normalized === "ordered" ? "已下单" : normalized === "generated" ? "已生成" : status;
 
-  return <span className={cn("rounded-full border px-3 py-1 text-xs", styles)}>{label}</span>;
+  return <span className={cn("rounded-lg border px-2.5 py-0.5 text-xs", styles)}>{label}</span>;
 }

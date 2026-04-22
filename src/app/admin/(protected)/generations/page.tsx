@@ -4,7 +4,7 @@ import { HistorySyncForm } from "@/components/history-sync-form";
 import { listGenerationRecords } from "@/lib/store";
 import { getDefaultShopDomain } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 type PageProps = {
   searchParams?: Promise<{
@@ -51,12 +51,12 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="admin-panel p-5">
+      <div className="admin-panel p-5 lg:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Generations Gallery</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-900">效果图画廊</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Generations Gallery</p>
+            <h1 className="mt-1.5 text-2xl font-semibold text-slate-900 lg:text-3xl">效果图画廊</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
               默认显示效果图，支持查看原图、批量勾选下载与历史记录同步。
             </p>
           </div>
@@ -70,22 +70,31 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
       </div>
 
       <div className="admin-panel p-4">
-        <div className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr_0.7fr_0.7fr_auto_auto]">
-          <form className="contents">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <form className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <label className="relative block sm:flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
                 name="q"
                 defaultValue={query}
                 placeholder="搜索邮箱 / 商品 / 提示词 / 订单号"
-                className="w-full rounded-2xl border border-[#d7dfeb] bg-white py-3 pl-11 pr-4 text-sm text-slate-700 outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none"
               />
             </label>
-
+            <button
+              type="submit"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+            >
+              <SlidersHorizontal className="size-4" />
+              筛选
+            </button>
+            <HistorySyncForm />
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
             <select
               name="status"
               defaultValue={params.status ?? ""}
-              className="w-full rounded-2xl border border-[#d7dfeb] bg-white px-4 py-3 text-sm text-slate-700"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
             >
               <option value="">全部状态</option>
               <option value="ordered">已下单</option>
@@ -95,7 +104,7 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
             <select
               name="productType"
               defaultValue={params.productType ?? ""}
-              className="w-full rounded-2xl border border-[#d7dfeb] bg-white px-4 py-3 text-sm text-slate-700"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
             >
               <option value="">全部商品类型</option>
               {productTypes.map((item) => (
@@ -108,7 +117,7 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
             <select
               name="model"
               defaultValue={params.model ?? ""}
-              className="w-full rounded-2xl border border-[#d7dfeb] bg-white px-4 py-3 text-sm text-slate-700"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 sm:flex-1"
             >
               <option value="">全部模型</option>
               {models.map((item) => (
@@ -117,19 +126,8 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
                 </option>
               ))}
             </select>
-
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-            >
-              <SlidersHorizontal className="size-4" />
-              筛选
-            </button>
-          </form>
-          <div className="xl:col-span-1 xl:justify-self-end">
-            <HistorySyncForm />
           </div>
-        </div>
+        </form>
       </div>
 
       {filteredRows.length === 0 ? (
@@ -143,7 +141,7 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <article className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+    <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <p className="text-sm text-slate-500">{label}</p>
       <h2 className="mt-1 text-2xl font-semibold text-slate-900">{value}</h2>
     </article>

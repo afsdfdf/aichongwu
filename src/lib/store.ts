@@ -6,7 +6,7 @@ import {
   NoSuchKey,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import { DEFAULT_PROMPTS, getModelOption, MODEL_OPTIONS } from "@/lib/catalog";
+import { DEFAULT_PROMPTS, getModelOption, getModelDefById, getProviderById, PROVIDERS, type ModelOption } from "@/lib/catalog";
 import {
   buildObjectUrl,
   getS3Bucket,
@@ -15,86 +15,38 @@ import {
   uploadBufferToS3,
 } from "@/lib/s3";
 import { getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
+import {
+  getRedisCache,
+  setRedisCache,
+  invalidateRedisCache,
+} from "@/lib/redis-cache";
+import type {
+  AppState,
+  PromptRecord,
+  StoreSettingRecord,
+  ProviderSecretRecord,
+  ProviderRecord,
+  ModelInstanceRecord,
+  GenerationRecord,
+  ImportedAssetRecord,
+} from "@/lib/types";
 
-export type PromptRecord = {
-  id: string;
-  shopDomain: string;
-  productType: string;
-  displayName: string;
-  promptTemplate: string;
-  negativePrompt: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type StoreSettingRecord = {
-  shopDomain: string;
-  activeModel: string;
-  requireGeneration: boolean;
-  widgetAccentColor: string;
-  widgetButtonText: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ProviderSecretRecord = {
-  key: string;
-  label: string;
-  apiKeyEncrypted: string | null;
-  webhookUrl: string | null;
-  baseUrl: string | null;
-  modelName: string | null;
-  isEnabled: boolean;
-  priority: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GenerationRecord = {
-  id: string;
-  shopDomain: string;
-  productType: string;
-  productTitle: string | null;
-  shopifyProductId: string | null;
-  shopifyVariantId: string | null;
-  customerEmail: string | null;
-  customerId: string | null;
-  sourceImageUrl: string;
-  outputImageUrl: string;
-  promptUsed: string;
-  modelUsed: string;
-  orderId: string | null;
-  orderName: string | null;
-  orderNumber: string | null;
-  status: string;
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ImportedAssetRecord = {
-  key: string;
-  url: string;
-  size: number;
-  lastModified: string | null;
-  importedAt: string;
+// Re-export types for backward compatibility with consumers
+export type {
+  AppState,
+  PromptRecord,
+  StoreSettingRecord,
+  ProviderSecretRecord,
+  ProviderRecord,
+  ModelInstanceRecord,
+  GenerationRecord,
+  ImportedAssetRecord,
 };
 
 type S3ObjectLite = {
   key: string;
   size: number;
   lastModified: string | null;
-};
-
-type AppState = {
-  version: 2;
-  prompts: PromptRecord[];
-  settings: StoreSettingRecord[];
-  providers: ProviderSecretRecord[];
-  generations: GenerationRecord[];
-  importedAssets: ImportedAssetRecord[];
-  updatedAt: string;
 };
 
 function nowIso() {
@@ -107,7 +59,7 @@ function getStateKey() {
 
 function createEmptyState(): AppState {
   return {
-    version: 2,
+    version: 3,
     prompts: [],
     settings: [],
     providers: [],
@@ -129,6 +81,8 @@ async function streamToString(stream: AsyncIterable<Uint8Array>) {
   }
   return Buffer.concat(chunks).toString("utf8");
 }
+
+// ── Encryption helpers ──
 
 function getCipherKey() {
   const secret = process.env.AUTH_SECRET;
@@ -165,7 +119,67 @@ function decryptSecret(value: string | null) {
   return decrypted.toString("utf8");
 }
 
+// ── v2 → v3 Migration ──
+
+function migrateV2ToV3(state: AppState): AppState {
+  if (state.version === 3) return state;
+
+  const v2Providers = state.providers as ProviderSecretRecord[];
+  const providerMap = new Map<string, ProviderRecord>();
+
+  for (const v2 of v2Providers) {
+    const modelDef = getModelDefById(v2.key);
+    const providerDefId = modelDef?.provider.id || "custom";
+    const existing = providerMap.get(providerDefId);
+
+    const modelRecord: ModelInstanceRecord = {
+      id: v2.key,
+      modelName: v2.modelName || modelDef?.model.modelName || v2.key,
+      adapter: modelDef?.model.adapter || "custom",
+      endpoint: v2.webhookUrl || (modelDef ? modelDef.model.defaultEndpoint : null),
+      isEnabled: v2.isEnabled,
+      priority: v2.priority,
+      createdAt: v2.createdAt,
+      updatedAt: v2.updatedAt,
+    };
+
+    if (existing) {
+      existing.models.push(modelRecord);
+      if (v2.apiKeyEncrypted) {
+        existing.apiKeyEncrypted = v2.apiKeyEncrypted;
+      }
+      if (v2.baseUrl) {
+        existing.baseUrl = v2.baseUrl;
+      }
+    } else {
+      const providerDef = getProviderById(providerDefId);
+      providerMap.set(providerDefId, {
+        id: providerDefId,
+        providerDefId,
+        label: providerDef?.label || v2.label,
+        apiKeyEncrypted: v2.apiKeyEncrypted,
+        baseUrl: v2.baseUrl || providerDef?.defaultBaseUrl || null,
+        isEnabled: true,
+        createdAt: v2.createdAt,
+        updatedAt: v2.updatedAt,
+        models: [modelRecord],
+      });
+    }
+  }
+
+  return {
+    ...state,
+    version: 3,
+    providers: [...providerMap.values()],
+  };
+}
+
+// ── S3 Read / Write ──
+
 async function readStateFromS3(): Promise<AppState> {
+  const cached = await getRedisCache();
+  if (cached) return migrateV2ToV3(cached);
+
   const client = getS3Client();
 
   try {
@@ -181,10 +195,12 @@ async function readStateFromS3(): Promise<AppState> {
     const content = await streamToString(body as AsyncIterable<Uint8Array>);
     if (!content.trim()) return createEmptyState();
     const parsed = JSON.parse(content) as AppState;
-    return {
+    const state = migrateV2ToV3({
       ...createEmptyState(),
       ...parsed,
-    };
+    });
+    await setRedisCache(state);
+    return state;
   } catch (error) {
     if (
       error instanceof NoSuchKey ||
@@ -206,13 +222,22 @@ async function writeStateToS3(state: AppState) {
       ContentType: "application/json; charset=utf-8",
     }),
   );
+  await setRedisCache(state);
 }
 
+// ── Write mutex ──
+let writeQueue: Promise<AppState> | null = null;
+
 async function mutateState(mutator: (state: AppState) => AppState | Promise<AppState>) {
-  const state = await readStateFromS3();
-  const nextState = await mutator(state);
-  await writeStateToS3(nextState);
-  return nextState;
+  const run = async (): Promise<AppState> => {
+    const state = await readStateFromS3();
+    const nextState = await mutator(state);
+    await writeStateToS3(nextState);
+    return nextState;
+  };
+
+  writeQueue = writeQueue ? writeQueue.then(run, run) : run();
+  return writeQueue;
 }
 
 async function listAllObjects(prefix: string) {
@@ -242,22 +267,45 @@ async function listAllObjects(prefix: string) {
   return items;
 }
 
-function ensureDefaultProviders(existing: ProviderSecretRecord[]) {
+// ── Ensure defaults ──
+
+function ensureDefaultProviders(existing: ProviderRecord[]): ProviderRecord[] {
   const now = nowIso();
-  const defaults = MODEL_OPTIONS.map<ProviderSecretRecord>((item) => ({
-    key: item.key,
-    label: item.label,
+  const defaults = PROVIDERS.map<ProviderRecord>((def) => ({
+    id: def.id,
+    providerDefId: def.id,
+    label: def.label,
     apiKeyEncrypted: null,
-    webhookUrl: item.defaultEndpoint || null,
-    baseUrl: null,
-    modelName: item.modelName,
+    baseUrl: def.defaultBaseUrl || null,
     isEnabled: true,
-    priority: MODEL_OPTIONS.findIndex((option) => option.key === item.key) + 1,
     createdAt: now,
     updatedAt: now,
+    models: def.models.map((m, idx) => ({
+      id: m.id,
+      modelName: m.modelName,
+      adapter: m.adapter as string,
+      endpoint: m.defaultEndpoint,
+      isEnabled: true,
+      priority: idx + 1,
+      createdAt: now,
+      updatedAt: now,
+    })),
   }));
 
-  return defaults.map((item) => existing.find((provider) => provider.key === item.key) ?? item);
+  for (const defDefault of defaults) {
+    const existingProvider = existing.find((p) => p.providerDefId === defDefault.providerDefId);
+    if (!existingProvider) {
+      existing.push(defDefault);
+    } else {
+      for (const defModel of defDefault.models) {
+        if (!existingProvider.models.some((m) => m.id === defModel.id)) {
+          existingProvider.models.push(defModel);
+        }
+      }
+    }
+  }
+
+  return existing;
 }
 
 function ensureDefaultSetting(shopDomain: string, existing?: StoreSettingRecord): StoreSettingRecord {
@@ -265,7 +313,7 @@ function ensureDefaultSetting(shopDomain: string, existing?: StoreSettingRecord)
   return (
     existing ?? {
       shopDomain,
-      activeModel: MODEL_OPTIONS[0].key,
+      activeModel: "gpt-image-1",
       requireGeneration: true,
       widgetAccentColor: "#0ea5e9",
       widgetButtonText: "生成效果图",
@@ -277,20 +325,23 @@ function ensureDefaultSetting(shopDomain: string, existing?: StoreSettingRecord)
 
 export async function ensureStoreDefaults(shopDomain = getDefaultShopDomain()) {
   const state = await readStateFromS3();
-  const hasPrompts = state.prompts.some((item) => item.shopDomain === shopDomain);
-  const hasSetting = state.settings.some((item) => item.shopDomain === shopDomain);
-  const hasProviders = state.providers.length >= MODEL_OPTIONS.length;
+  const v3State = migrateV2ToV3(state);
+  const hasPrompts = v3State.prompts.some((item) => item.shopDomain === shopDomain);
+  const hasSetting = v3State.settings.some((item) => item.shopDomain === shopDomain);
+  const hasProviders = (v3State.providers as ProviderRecord[]).length >= PROVIDERS.length;
 
-  if (hasPrompts && hasSetting && hasProviders) return;
+  if (hasPrompts && hasSetting && hasProviders && v3State.version === 3) return v3State;
 
-  await mutateState((current) => {
-    const next = { ...current };
-    next.providers = ensureDefaultProviders(current.providers);
+  const updated = await mutateState((current) => {
+    const v3 = migrateV2ToV3(current);
+    const next = { ...v3, version: 3 as const };
 
-    if (!current.prompts.some((item) => item.shopDomain === shopDomain)) {
+    next.providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
+
+    if (!v3.prompts.some((item) => item.shopDomain === shopDomain)) {
       const now = nowIso();
       next.prompts = [
-        ...current.prompts,
+        ...v3.prompts,
         ...DEFAULT_PROMPTS.map((item) => ({
           id: randomUUID(),
           shopDomain,
@@ -298,6 +349,7 @@ export async function ensureStoreDefaults(shopDomain = getDefaultShopDomain()) {
           displayName: item.displayName,
           promptTemplate: item.promptTemplate,
           negativePrompt: null,
+          aspectRatio: null,
           isActive: true,
           createdAt: now,
           updatedAt: now,
@@ -305,17 +357,38 @@ export async function ensureStoreDefaults(shopDomain = getDefaultShopDomain()) {
       ];
     }
 
-    if (!current.settings.some((item) => item.shopDomain === shopDomain)) {
-      next.settings = [...current.settings, ensureDefaultSetting(shopDomain)];
+    if (!v3.settings.some((item) => item.shopDomain === shopDomain)) {
+      next.settings = [...v3.settings, ensureDefaultSetting(shopDomain)];
     }
 
     return next;
   });
+
+  return updated;
 }
 
+// ── Public: get store context for UI ──
+
+export type ProviderSummary = {
+  id: string;
+  providerDefId: string;
+  label: string;
+  hasApiKey: boolean;
+  baseUrl: string | null;
+  isEnabled: boolean;
+  models: Array<{
+    id: string;
+    modelName: string;
+    adapter: string;
+    endpoint: string | null;
+    isEnabled: boolean;
+    priority: number;
+    option: ModelOption | null;
+  }>;
+};
+
 export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
-  await ensureStoreDefaults(shopDomain);
-  const state = await readStateFromS3();
+  const state = await ensureStoreDefaults(shopDomain);
 
   const prompts = state.prompts
     .filter((item) => item.shopDomain === shopDomain)
@@ -324,21 +397,33 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
     shopDomain,
     state.settings.find((item) => item.shopDomain === shopDomain),
   );
-  const providers = ensureDefaultProviders(state.providers).map((item) => ({
-    option: getModelOption(item.key),
-    key: item.key,
-    label: item.label,
-    webhookUrl: item.webhookUrl,
-    baseUrl: item.baseUrl,
-    modelName: item.modelName || getModelOption(item.key)?.modelName || "",
-    isEnabled: item.isEnabled,
-    priority: item.priority,
-    hasApiKey: Boolean(item.apiKeyEncrypted),
+
+  const providers: ProviderSummary[] = ensureDefaultProviders(
+    [...(state.providers as ProviderRecord[])],
+  ).map((p) => ({
+    id: p.id,
+    providerDefId: p.providerDefId,
+    label: p.label,
+    hasApiKey: Boolean(p.apiKeyEncrypted),
+    baseUrl: p.baseUrl,
+    isEnabled: p.isEnabled,
+    models: p.models.map((m) => ({
+      id: m.id,
+      modelName: m.modelName,
+      adapter: m.adapter,
+      endpoint: m.endpoint,
+      isEnabled: m.isEnabled,
+      priority: m.priority,
+      option: getModelOption(m.id),
+    })),
   }));
+
   const importedAssets = state.importedAssets.sort((a, b) => b.importedAt.localeCompare(a.importedAt));
 
   return { prompts, setting, providers, importedAssets };
 }
+
+// ── Prompt CRUD ──
 
 export async function resolvePromptForProduct(input: { shopDomain: string; productType: string }) {
   const { prompts } = await getStoreContext(input.shopDomain);
@@ -362,6 +447,7 @@ export async function savePromptRecord(input: {
   displayName: string;
   promptTemplate: string;
   negativePrompt: string | null;
+  aspectRatio: string | null;
   isActive: boolean;
 }) {
   await ensureStoreDefaults(input.shopDomain);
@@ -380,6 +466,7 @@ export async function savePromptRecord(input: {
       displayName: input.displayName,
       promptTemplate: input.promptTemplate,
       negativePrompt: input.negativePrompt,
+      aspectRatio: input.aspectRatio,
       isActive: input.isActive,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -401,6 +488,8 @@ export async function deletePromptRecord(id: string) {
     prompts: state.prompts.filter((item) => item.id !== id),
   }));
 }
+
+// ── Store settings ──
 
 export async function saveStoreSettingRecord(input: {
   shopDomain: string;
@@ -432,6 +521,94 @@ export async function saveStoreSettingRecord(input: {
   });
 }
 
+// ── Provider config save (v3) ──
+
+export async function saveProviderRecord(input: {
+  providerId: string;
+  apiKey?: string;
+  keepExistingApiKey?: boolean;
+  baseUrl?: string | null;
+  models?: Array<{
+    id: string;
+    modelName: string;
+    endpoint?: string | null;
+    isEnabled?: boolean;
+    priority?: number;
+  }>;
+}) {
+  await mutateState((state) => {
+    const v3 = migrateV2ToV3(state);
+    const now = nowIso();
+    const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
+    let target = providers.find((p) => p.id === input.providerId);
+
+    if (!target) {
+      const def = getProviderById(input.providerId);
+      target = {
+        id: input.providerId,
+        providerDefId: input.providerId,
+        label: def?.label || input.providerId,
+        apiKeyEncrypted: null,
+        baseUrl: input.baseUrl || def?.defaultBaseUrl || null,
+        isEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+        models: def?.models.map((m, idx) => ({
+          id: m.id,
+          modelName: m.modelName,
+          adapter: m.adapter as string,
+          endpoint: m.defaultEndpoint,
+          isEnabled: true,
+          priority: idx + 1,
+          createdAt: now,
+          updatedAt: now,
+        })) || [],
+      };
+      providers.push(target);
+    }
+
+    const nextApiKey =
+      typeof input.apiKey === "string" && input.apiKey.trim()
+        ? encryptSecret(input.apiKey.trim())
+        : input.keepExistingApiKey
+          ? target.apiKeyEncrypted
+          : null;
+
+    target.apiKeyEncrypted = nextApiKey;
+    target.baseUrl = input.baseUrl === undefined ? target.baseUrl : input.baseUrl;
+    target.updatedAt = now;
+
+    if (input.models) {
+      for (const modelUpdate of input.models) {
+        const existing = target.models.find((m) => m.id === modelUpdate.id);
+        if (existing) {
+          existing.modelName = modelUpdate.modelName || existing.modelName;
+          existing.endpoint = modelUpdate.endpoint === undefined ? existing.endpoint : modelUpdate.endpoint;
+          existing.isEnabled = modelUpdate.isEnabled ?? existing.isEnabled;
+          existing.priority = modelUpdate.priority ?? existing.priority;
+          existing.updatedAt = now;
+        } else {
+          const modelDef = getModelDefById(modelUpdate.id);
+          target.models.push({
+            id: modelUpdate.id,
+            modelName: modelUpdate.modelName || modelDef?.model.modelName || modelUpdate.id,
+            adapter: modelDef?.model.adapter as string || "custom",
+            endpoint: modelUpdate.endpoint || modelDef?.model.defaultEndpoint || null,
+            isEnabled: modelUpdate.isEnabled ?? true,
+            priority: modelUpdate.priority ?? target.models.length + 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    return { ...v3, version: 3 as const, providers };
+  });
+}
+
+// ── Backward-compatible: saveProviderConfigs (v2 style) ──
+
 export async function saveProviderConfigs(
   updates: Array<{
     key: string;
@@ -445,53 +622,107 @@ export async function saveProviderConfigs(
     priority?: number;
   }>,
 ) {
-  await mutateState((state) => {
-    const now = nowIso();
-    const providers = ensureDefaultProviders(state.providers).map((provider) => {
-      const update = updates.find((item) => item.key === provider.key);
-      if (!update) return provider;
+  const byProvider = new Map<string, typeof updates>();
 
-      const nextApiKey =
-        typeof update.apiKey === "string" && update.apiKey.trim()
-          ? encryptSecret(update.apiKey.trim())
-          : update.keepExistingApiKey
-            ? provider.apiKeyEncrypted
-            : null;
+  for (const update of updates) {
+    const modelDef = getModelDefById(update.key);
+    const providerId = modelDef?.provider.id || "custom";
+    if (!byProvider.has(providerId)) byProvider.set(providerId, []);
+    byProvider.get(providerId)!.push(update);
+  }
 
-      return {
-        ...provider,
-        label: update.label,
-        apiKeyEncrypted: nextApiKey,
-        webhookUrl: update.webhookUrl === undefined ? provider.webhookUrl : update.webhookUrl,
-        baseUrl: update.baseUrl === undefined ? provider.baseUrl : update.baseUrl,
-        modelName: update.modelName === undefined ? provider.modelName : update.modelName,
-        isEnabled: update.isEnabled ?? provider.isEnabled,
-        priority: update.priority ?? provider.priority,
-        updatedAt: now,
-      };
+  for (const [providerId, providerUpdates] of byProvider) {
+    const first = providerUpdates[0];
+    await saveProviderRecord({
+      providerId,
+      apiKey: first.apiKey,
+      keepExistingApiKey: first.keepExistingApiKey,
+      baseUrl: first.baseUrl,
+      models: providerUpdates.map((u) => ({
+        id: u.key,
+        modelName: u.modelName || u.key,
+        endpoint: u.webhookUrl,
+        isEnabled: u.isEnabled,
+        priority: u.priority,
+      })),
     });
-
-    return {
-      ...state,
-      providers,
-    };
-  });
+  }
 }
+
+// ── Get provider configs (for AI backend) ──
 
 export async function getProviderConfigs() {
   const state = await readStateFromS3();
-  return ensureDefaultProviders(state.providers).map((item) => ({
-    ...item,
-    option: getModelOption(item.key),
-    apiKey: decryptSecret(item.apiKeyEncrypted),
-    hasApiKey: Boolean(item.apiKeyEncrypted),
-  })).sort((a, b) => a.priority - b.priority);
+  const v3 = migrateV2ToV3(state);
+  const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
+
+  return providers.flatMap((p) =>
+    p.models.map((m) => ({
+      key: m.id,
+      label: `${p.label} / ${m.id}`,
+      apiKeyEncrypted: p.apiKeyEncrypted,
+      webhookUrl: m.endpoint,
+      baseUrl: p.baseUrl,
+      modelName: m.modelName,
+      isEnabled: m.isEnabled && p.isEnabled,
+      priority: m.priority,
+      option: getModelOption(m.id),
+      hasApiKey: Boolean(p.apiKeyEncrypted),
+      providerId: p.id,
+      adapter: m.adapter,
+    })),
+  ).sort((a, b) => a.priority - b.priority);
+}
+
+// Internal-only: returns decrypted API key for backend AI calls
+export async function getProviderConfigWithKey(key: string) {
+  const state = await readStateFromS3();
+  const v3 = migrateV2ToV3(state);
+  const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
+
+  for (const p of providers) {
+    const model = p.models.find((m) => m.id === key);
+    if (model) {
+      const providerDef = getProviderById(p.providerDefId);
+      const fullEndpoint = buildFullEndpoint(providerDef, p, model);
+      return {
+        key: model.id,
+        label: `${p.label} / ${model.id}`,
+        apiKeyEncrypted: p.apiKeyEncrypted,
+        apiKey: decryptSecret(p.apiKeyEncrypted),
+        webhookUrl: model.endpoint,
+        baseUrl: p.baseUrl,
+        modelName: model.modelName,
+        isEnabled: model.isEnabled && p.isEnabled,
+        priority: model.priority,
+        option: getModelOption(model.id),
+        hasApiKey: Boolean(p.apiKeyEncrypted),
+        providerId: p.id,
+        providerDefId: p.providerDefId,
+        adapter: model.adapter,
+        fullEndpoint,
+      };
+    }
+  }
+  return null;
+}
+
+function buildFullEndpoint(
+  providerDef: ReturnType<typeof getProviderById>,
+  provider: ProviderRecord,
+  model: ModelInstanceRecord,
+): string {
+  if (model.endpoint?.startsWith("http")) return model.endpoint;
+  const base = provider.baseUrl || providerDef?.defaultBaseUrl || "";
+  const path = model.endpoint || "";
+  return `${base}${path}`;
 }
 
 export async function getProviderConfigByKey(key: string) {
-  const providers = await getProviderConfigs();
-  return providers.find((item) => item.key === key) ?? null;
+  return getProviderConfigWithKey(key);
 }
+
+// ── Generation records ──
 
 export async function createGenerationRecord(input: Omit<GenerationRecord, "id" | "createdAt" | "updatedAt">) {
   const record: GenerationRecord = {
@@ -687,4 +918,11 @@ export function getS3Summary() {
     publicBaseUrl: getS3PublicBaseUrl(),
     stateKey: getStateKey(),
   };
+}
+
+/** Force-refresh: clear Redis, pull fresh from S3, update Redis. Called by Vercel Cron. */
+export async function forceRefreshCache() {
+  await invalidateRedisCache();
+  const fresh = await readStateFromS3();
+  return fresh;
 }

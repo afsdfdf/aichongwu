@@ -21,13 +21,11 @@ export async function POST(request: Request) {
       ok: result.ok,
       message: result.ok
         ? `${result.option.label} 配置可用，已读取到端点${result.hasApiKey ? "和 API Key" : ""}。`
-        : `${result.option.label} 配置不完整，请检查端点或 API Key。`,
+        : `${result.option.label} 配置不完整，请检查${!result.endpointUrl ? "端点" : "API Key"}。`,
       result,
     });
   } catch (error) {
-    return NextResponse.json(
-      { message: error instanceof Error ? error.message : "测试失败" },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : "测试失败";
+    return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

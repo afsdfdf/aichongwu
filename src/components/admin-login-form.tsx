@@ -48,7 +48,7 @@ export function AdminLoginForm() {
           name="email"
           type="email"
           required
-          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500"
+          className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500"
           placeholder="admin@example.com"
         />
       </div>
@@ -62,7 +62,7 @@ export function AdminLoginForm() {
           name="password"
           type="password"
           required
-          className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500"
+          className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500"
           placeholder="••••••••"
         />
       </div>
@@ -71,7 +71,7 @@ export function AdminLoginForm() {
 
       <button
         type="submit"
-        className="w-full rounded-2xl bg-sky-400 px-4 py-3 font-medium text-slate-950 transition hover:bg-sky-300"
+        className="w-full rounded-lg bg-sky-400 px-4 py-3 font-medium text-slate-950 transition hover:bg-sky-300"
       >
         {loading ? "登录中..." : "进入后台"}
       </button>

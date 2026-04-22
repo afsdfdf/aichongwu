@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { detectModelsFromEndpoint, getModelOption } from "@/lib/catalog";
+import { getModelOption, getProviderById } from "@/lib/catalog";
 import { requireAdminSession } from "@/lib/auth";
 import {
   deletePromptRecord,
   getStoreContext,
   importExistingBucketAssets,
   savePromptRecord,
-  saveProviderConfigs,
+  saveProviderRecord,
   saveStoreSettingRecord,
   syncHistoricalGenerationsFromBucket,
 } from "@/lib/store";
@@ -24,6 +24,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   const displayName = String(formData.get("displayName") || "").trim();
   const promptTemplate = String(formData.get("promptTemplate") || "").trim();
   const negativePrompt = String(formData.get("negativePrompt") || "").trim();
+  const aspectRatio = String(formData.get("aspectRatio") || "").trim();
   const isActive = formData.get("isActive") === "on";
 
   if (!productType || !displayName || !promptTemplate) {
@@ -37,6 +38,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
     displayName,
     promptTemplate,
     negativePrompt: negativePrompt || null,
+    aspectRatio: aspectRatio || null,
     isActive,
   });
 
@@ -46,7 +48,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   return { ok: true, message: "提示词已保存。" };
 }
 
-export async function deletePromptAction(formData: FormData) {
+export async function deletePromptAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   await requireAdminSession();
   const id = String(formData.get("id") || "");
   if (id) {
@@ -54,6 +56,7 @@ export async function deletePromptAction(formData: FormData) {
   }
   revalidatePath("/admin/prompts");
   revalidatePath("/admin");
+  return { ok: true, message: id ? "已删除。" : "" };
 }
 
 export async function saveStoreSettingAction(
@@ -64,56 +67,73 @@ export async function saveStoreSettingAction(
 
   const { setting } = await getStoreContext(getDefaultShopDomain());
 
+  // v3: read provider-level fields
+  const providerId = String(formData.get("providerId") || "").trim();
   const activeModel = String(formData.get("activeModel") || setting.activeModel || "gpt-image-1");
-  const option = getModelOption(activeModel);
-  if (!option) {
-    return { ok: false, message: "未找到对应模型。" };
-  }
+  const apiKey = String(formData.get("apiKey") || "");
+  const baseUrl = String(formData.get("baseUrl") || "").trim();
+  const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
+  const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "生成效果图");
 
-  const nextButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "生成效果图");
-  const nextAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
-
+  // Save store setting (active model, button style)
   await saveStoreSettingRecord({
     shopDomain: getDefaultShopDomain(),
     activeModel,
     requireGeneration: setting.requireGeneration,
-    widgetAccentColor: nextAccentColor,
-    widgetButtonText: nextButtonText,
+    widgetAccentColor,
+    widgetButtonText,
   });
 
-  const endpoint =
-    String(formData.get("endpointUrl") || formData.get(`${option.formKey}__endpoint`) || "").trim();
-  const apiKey = String(formData.get("apiKey") || formData.get(`${option.formKey}__api_key`) || "");
-  const baseUrl = String(formData.get("baseUrl") || formData.get(`${option.formKey}__base_url`) || "").trim();
-  const modelName =
-    String(formData.get("modelName") || formData.get(`${option.formKey}__model_name`) || "").trim();
-  const priority = Math.max(1, Number(formData.get(`${option.formKey}__priority`) || 1));
-  const isEnabled = formData.get(`${option.formKey}__enabled`) === "on";
+  // If providerId is present, save provider-level config
+  if (providerId) {
+    const providerDef = getProviderById(providerId);
+    const label = providerDef?.label || providerId;
 
-  const compatible = detectModelsFromEndpoint(endpoint);
-  const compatibleHint =
-    compatible.length > 0
-      ? `已识别 ${compatible.length} 个兼容模型。`
-      : "当前端点未识别到常见模型，将按你手动选择的模型配置保存。";
+    // Collect model-level fields from the form
+    const models: Array<{
+      id: string;
+      modelName: string;
+      endpoint: string | null;
+      isEnabled: boolean;
+      priority: number;
+    }> = [];
 
-  await saveProviderConfigs([
-    {
-      key: option.key,
-      label: option.label,
+    for (const [key, value] of formData.entries()) {
+      const match = key.match(/^model_(.+)_modelName$/);
+      if (match) {
+        const modelId = match[1];
+        const modelName = String(value || "").trim();
+        const endpoint = String(formData.get(`model_${modelId}_endpoint`) || "").trim() || null;
+        const priority = Math.max(1, Number(formData.get(`model_${modelId}_priority`) || 1));
+
+        if (modelName) {
+          models.push({ id: modelId, modelName, endpoint, isEnabled: true, priority });
+        }
+      }
+    }
+
+    await saveProviderRecord({
+      providerId,
       apiKey,
       keepExistingApiKey: !apiKey.trim(),
-      webhookUrl: endpoint || option.defaultEndpoint || null,
       baseUrl: baseUrl || null,
-      modelName: modelName || option.modelName,
-      priority,
-      isEnabled,
-    },
-  ]);
+      models: models.length > 0 ? models : undefined,
+    });
+
+    const modelCount = models.length || providerDef?.models.length || 0;
+    revalidatePath("/admin");
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin/install");
+    return {
+      ok: true,
+      message: `${label} 配置已保存（${modelCount} 个模型）。`,
+    };
+  }
 
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/install");
-  return { ok: true, message: `${option.label} 配置已保存。${compatibleHint}` };
+  return { ok: true, message: "设置已保存。" };
 }
 
 export async function importBucketAssetsAction(

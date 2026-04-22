@@ -15,6 +15,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "请上传图片文件。" }, { status: 400 });
     }
 
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ message: "图片文件不能超过 10MB。" }, { status: 400 });
+    }
+
     const shopDomain = String(formData.get("shopDomain") || getDefaultShopDomain());
     const productType = slugifyProductType(String(formData.get("productType") || "frame"));
     const productTitle = String(formData.get("productTitle") || "");
@@ -52,6 +57,7 @@ export async function POST(request: Request) {
       sourceImageContentType: file.type || "image/png",
       sourceImageUrl: sourceUpload.url,
       productType,
+      aspectRatio: promptRule.aspectRatio ?? undefined,
     });
 
     const record = await createGenerationRecord({

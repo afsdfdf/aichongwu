@@ -1,43 +1,42 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState, useRef, useEffect } from "react";
 import {
   CheckCircle2,
+  Eye,
+  EyeOff,
   LoaderCircle,
   Save,
-  TestTube2,
-  ToggleLeft,
-  ToggleRight,
+  Search,
   Trash2,
-  WandSparkles,
+  Zap,
+  ImageIcon,
+  VideoIcon,
+  Upload,
+  X,
+  Sparkles,
+  Pencil,
+  Check,
 } from "lucide-react";
-import { detectModelsFromEndpoint, MODEL_OPTIONS } from "@/lib/catalog";
+import { PROVIDERS, getProviderById, getModelDefById, type ProviderDefinition } from "@/lib/catalog";
 import { saveStoreSettingAction } from "@/app/admin/(protected)/actions";
+import type { ProviderSummary } from "@/lib/store";
 
 const initialState = { ok: false, message: "" };
 
-type ProviderSummary = {
-  key: string;
-  label: string;
-  webhookUrl: string | null;
-  baseUrl: string | null;
-  modelName: string;
-  hasApiKey: boolean;
-  isEnabled: boolean;
-  priority: number;
-  option?: {
-    key: string;
-    formKey: string;
-    label: string;
-    description: string;
-    provider: string;
-    modelName: string;
-    defaultEndpoint?: string;
-    docsHint: string;
-    supportsImageTest: boolean;
-    supportsPreviewGeneration: boolean;
-    authType: "bearer" | "query" | "none";
-  } | null;
+type DetectedModel = {
+  id: string;
+  type: string;
+  matchedKeywords?: string[];
+};
+
+type SavedPrompt = {
+  id: string;
+  productType: string;
+  displayName: string;
+  promptTemplate: string;
+  negativePrompt: string | null;
+  isActive: boolean;
 };
 
 export function ModelSettingsForm({
@@ -53,497 +52,520 @@ export function ModelSettingsForm({
   providers: ProviderSummary[];
 }) {
   const [state, formAction, pending] = useActionState(saveStoreSettingAction, initialState);
-  const [listMessage, setListMessage] = useState("");
-  const providerMap = useMemo(() => Object.fromEntries(providers.map((item) => [item.key, item])), [providers]);
-  const [selectedModelKey, setSelectedModelKey] = useState(activeModel);
-  const [selectedEndpointTemplate, setSelectedEndpointTemplate] = useState(activeModel);
-
-  const selectedOption = MODEL_OPTIONS.find((item) => item.key === selectedModelKey) ?? MODEL_OPTIONS[0];
-  const selectedProvider = providerMap[selectedOption.key];
-  const endpointValue = selectedProvider?.webhookUrl || selectedOption.defaultEndpoint || "";
-  const detectedModels = useMemo(() => detectModelsFromEndpoint(endpointValue), [endpointValue]);
-  const endpointTemplates = MODEL_OPTIONS.filter((item) => item.defaultEndpoint);
-  const configuredModels = useMemo(
-    () =>
-      providers
-        .filter(
-          (item) =>
-            item.hasApiKey ||
-            Boolean(item.baseUrl) ||
-            Boolean(item.webhookUrl && item.webhookUrl !== item.option?.defaultEndpoint),
-        )
-        .sort((a, b) => a.priority - b.priority),
-    [providers],
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    providers.find((p) => p.models.some((m) => m.id === activeModel))?.id || providers[0]?.id || "openai",
   );
 
-  async function manageProvider(
-    action: "toggle" | "delete" | "priority" | "set_main",
-    payload: Record<string, unknown>,
-  ) {
-    const response = await fetch("/api/providers/manage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, ...payload }),
-    });
-    const data = (await response.json()) as { message?: string };
-    setListMessage(data.message || (response.ok ? "已更新" : "更新失败"));
-    if (response.ok) {
-      window.location.reload();
-    }
+  const selectedProvider = providers.find((p) => p.id === selectedProviderId);
+  const providerDef = getProviderById(selectedProviderId);
+
+  return (
+    <div className="space-y-2">
+      {/* Provider selector row + config in one card */}
+      <div className="rounded border border-slate-200 bg-white px-3 py-2">
+        {/* Provider pills */}
+        <div className="flex flex-wrap items-center gap-1">
+          {PROVIDERS.map((def) => {
+            const configured = providers.find((p) => p.providerDefId === def.id);
+            const hasKey = configured?.hasApiKey ?? false;
+            const isActive = selectedProviderId === def.id;
+            return (
+              <button
+                key={def.id}
+                type="button"
+                onClick={() => setSelectedProviderId(def.id)}
+                className={`inline-flex items-center gap-0.5 rounded px-2 py-0.5 text-[11px] font-medium transition ${
+                  isActive
+                    ? "bg-blue-600 text-white"
+                    : hasKey
+                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                }`}
+              >
+                {def.label}
+                {hasKey && !isActive && <CheckCircle2 className="size-2.5" />}
+              </button>
+            );
+          })}
+          {state.message && (
+            <span className={`ml-auto text-[10px] ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
+              {state.message}
+            </span>
+          )}
+        </div>
+
+        {/* Config form inline */}
+        {selectedProvider && providerDef ? (
+          <ProviderConfigCard
+            provider={selectedProvider}
+            providerDef={providerDef}
+            activeModel={activeModel}
+            widgetAccentColor={widgetAccentColor}
+            widgetButtonText={widgetButtonText}
+            formAction={formAction}
+            pending={pending}
+            state={state}
+          />
+        ) : null}
+      </div>
+
+      {/* Test + Prompt (collapsed) */}
+      <TestAndPromptWorkspace providers={providers} activeModel={activeModel} />
+    </div>
+  );
+}
+
+// ── Provider config (inline, no extra padding) ──
+
+function ProviderConfigCard({
+  provider,
+  providerDef,
+  activeModel,
+  widgetAccentColor,
+  widgetButtonText,
+  formAction,
+  pending,
+  state,
+}: {
+  provider: ProviderSummary;
+  providerDef: ProviderDefinition;
+  activeModel: string;
+  widgetAccentColor: string;
+  widgetButtonText: string;
+  formAction: (payload: FormData) => void;
+  pending: boolean;
+  state: { ok: boolean; message: string };
+}) {
+  const [showKey, setShowKey] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [baseUrlInput, setBaseUrlInput] = useState(provider.baseUrl || providerDef.defaultBaseUrl || "");
+
+  const [detecting, setDetecting] = useState(false);
+  const [detectedModels, setDetectedModels] = useState<DetectedModel[]>([]);
+  const [detectMessage, setDetectMessage] = useState("");
+
+  async function detectModels() {
+    const key = apiKeyInput.trim();
+    const url = baseUrlInput.trim();
+    if (!key || !url) { setDetectMessage("先填 Key+URL"); return; }
+    setDetecting(true); setDetectMessage(""); setDetectedModels([]);
+    try {
+      const res = await fetch("/api/providers/detect-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: url, apiKey: key }),
+      });
+      const data = (await res.json()) as { ok?: boolean; message?: string; models?: DetectedModel[] };
+      if (data.ok && data.models) { setDetectedModels(data.models); setDetectMessage(`${data.models.length} 模型`); }
+      else { setDetectMessage(data.message || "失败"); setDetectedModels([]); }
+    } catch { setDetectMessage("请求失败"); }
+    setDetecting(false);
   }
 
   return (
-    <form action={formAction} className="admin-panel space-y-5 p-5">
-      <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">模型与 API 配置中心</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              先选择全球常见生图 API 端点模板，或者直接填写你自己的端点；然后选择模型并填写模型 ID。
-            </p>
-          </div>
+    <form action={formAction} className="mt-1.5 space-y-1.5">
+      <input type="hidden" name="providerId" value={provider.id} />
+      <input type="hidden" name="activeModel" value={activeModel} />
+      <input type="hidden" name="widgetAccentColor" value={widgetAccentColor} />
+      <input type="hidden" name="widgetButtonText" value={widgetButtonText} />
 
-          <div className="space-y-2">
-            <label className="text-sm text-slate-600">API 端点模板</label>
-            <select
-              value={selectedEndpointTemplate}
-              onChange={(event) => {
-                setSelectedEndpointTemplate(event.target.value);
-                setSelectedModelKey(event.target.value);
-              }}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-            >
-              {endpointTemplates.map((item) => (
-                <option key={item.key} value={item.key}>
-                  {item.label} · {item.defaultEndpoint}
-                </option>
-              ))}
-              <option value="custom-webhook">自定义 API · 自由填写端点</option>
-            </select>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="API 端点"
-              name="endpointUrl"
-              defaultValue={endpointValue}
-              placeholder="https://api.example.com/generate"
+      {/* Key + URL one row */}
+      <div className="flex gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="relative">
+            <input
+              name="apiKey"
+              type={showKey ? "text" : "password"}
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={provider.hasApiKey ? "Key ●●●" : "API Key"}
+              autoComplete="off"
+              className="w-full rounded border border-slate-200 bg-white px-2 py-1 pr-7 text-[11px] text-slate-900 outline-none"
             />
-            <Field
-              label="模型 ID / 模型名称"
-              name="modelName"
-              defaultValue={selectedProvider?.modelName || selectedOption.modelName}
-              placeholder="如 gpt-image-1 / flux-pro / stable-diffusion-3.5-large"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm text-slate-600">兼容模型选择</label>
-            <select
-              name="activeModel"
-              value={selectedModelKey}
-              onChange={(event) => setSelectedModelKey(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-            >
-              {(detectedModels.length > 0 ? detectedModels : MODEL_OPTIONS).map((item) => (
-                <option key={item.key} value={item.key}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500">
-              {detectedModels.length > 0
-                ? `当前端点识别出 ${detectedModels.length} 个兼容模型，可直接选择。`
-                : "当前端点未识别到常见模型，可手动输入模型 ID 并选择自定义 API。"}
-            </p>
+            <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              {showKey ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+            </button>
           </div>
         </div>
-
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-          <p className="text-sm font-medium text-slate-700">店铺按钮预览</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            当前店铺会使用这个按钮文案与颜色，供商品页上传和生成预览使用。
-          </p>
-          <div className="mt-4 rounded-[20px] border border-slate-200 bg-white p-5">
-            <div className="space-y-3">
-              <div className="h-3 w-32 rounded-full bg-slate-100" />
-              <div className="h-3 w-52 rounded-full bg-slate-100" />
-              <button
-                type="button"
-                style={{ backgroundColor: widgetAccentColor || "#2563eb" }}
-                className="mt-2 w-full rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-sm"
-              >
-                {widgetButtonText || "生成效果图"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h4 className="text-lg font-semibold text-slate-900">{selectedOption.label}</h4>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
-                {selectedOption.provider}
-              </span>
-              {selectedProvider?.hasApiKey ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-600">
-                  <CheckCircle2 className="size-3.5" />
-                  已保存 API Key
-                </span>
-              ) : (
-                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
-                  尚未保存 API Key
-                </span>
-              )}
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-500">{selectedOption.description}</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{selectedOption.docsHint}</p>
-          </div>
-          <ProviderTools option={selectedOption} />
-        </div>
-
-        <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_0.8fr_0.8fr_160px_140px]">
-          <Field
-            label="API Key"
-            name="apiKey"
-            placeholder={
-              selectedOption.authType === "query"
-                ? "Google / Query API Key"
-                : selectedOption.authType === "none"
-                  ? "可留空"
-                  : "Bearer Token / API Key"
-            }
-          />
-          <Field
-            label="Base URL / 额外地址（可选）"
+        <div className="flex-1 min-w-0">
+          <input
             name="baseUrl"
-            defaultValue={selectedProvider?.baseUrl || ""}
-            placeholder={
-              selectedOption.key.startsWith("gpt") || selectedOption.key === "dall-e-3"
-                ? "https://api.openai.com/v1"
-                : ""
-            }
+            value={baseUrlInput}
+            onChange={(e) => setBaseUrlInput(e.target.value)}
+            placeholder={providerDef.defaultBaseUrl || "Base URL"}
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-900 outline-none"
           />
-          <Field
-            label="优先级"
-            name={`${selectedOption.formKey}__priority`}
-            defaultValue={String(selectedProvider?.priority || 1)}
-            placeholder="1"
-          />
-          <div className="space-y-2">
-            <label className="text-sm text-slate-600">启用</label>
-            <label className="flex h-[50px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                name={`${selectedOption.formKey}__enabled`}
-                defaultChecked={selectedProvider?.isEnabled ?? true}
-                className="size-4"
-              />
-              启用
-            </label>
-          </div>
         </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-          <div>
-            <p className="text-sm font-medium text-blue-900">保存配置</p>
-            <p className="mt-1 text-xs text-blue-800">
-              保存后会自动加入下方“已配置成功的模型”列表，可进一步启停、设主模型、测试和排序。
-            </p>
-          </div>
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
-          >
-            <Save className="size-4" />
-            {pending ? "保存中..." : "保存当前模型配置"}
-          </button>
-        </div>
-      </div>
-
-      <ConfiguredModelsTable
-        configuredModels={configuredModels}
-        activeModel={activeModel}
-        listMessage={listMessage}
-        onEdit={(key) => setSelectedModelKey(key)}
-        onManage={manageProvider}
-      />
-
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-slate-500">{state.message}</p>
-        <button
-          type="submit"
-          className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          保存全部配置
+        <button type="submit" disabled={pending} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          {pending ? "..." : "保存"}
         </button>
+        <button
+          type="button"
+          onClick={detectModels}
+          disabled={detecting || (!apiKeyInput.trim() && !provider.hasApiKey) || !baseUrlInput.trim()}
+          className="shrink-0 rounded bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+        >
+          {detecting ? "..." : "检测"}
+        </button>
+        {detectMessage && (
+          <span className={`shrink-0 self-center text-[10px] ${detectedModels.length > 0 ? "text-emerald-600" : "text-amber-600"}`}>
+            {detectMessage}
+          </span>
+        )}
       </div>
+
+      {/* Detected models (compact) */}
+      {detectedModels.length > 0 && (
+        <div className="max-h-28 overflow-y-auto rounded border border-slate-200 bg-slate-50">
+          {detectedModels.map((m) => {
+            const isAlreadyAdded = provider.models.some((pm) => pm.modelName === m.id || pm.id === m.id);
+            const isCurrentMain = provider.models.find((pm) => pm.modelName === m.id || pm.id === m.id)?.id === activeModel;
+            return (
+              <div key={m.id} className={`flex items-center justify-between border-b border-slate-100 px-2 py-0.5 last:border-0 ${isCurrentMain ? "bg-blue-50" : isAlreadyAdded ? "bg-emerald-50/50" : ""}`}>
+                <div className="flex items-center gap-1 min-w-0">
+                  {m.type === "video" ? <VideoIcon className="size-2.5 text-purple-500 shrink-0" /> : <ImageIcon className="size-2.5 text-blue-500 shrink-0" />}
+                  <span className="text-[10px] text-slate-900 truncate">{m.id}</span>
+                  {isCurrentMain && <span className="rounded bg-blue-600 px-0.5 text-[9px] text-white">主</span>}
+                  {isAlreadyAdded && !isCurrentMain && <span className="rounded bg-emerald-100 px-0.5 text-[9px] text-emerald-700">已有</span>}
+                </div>
+                {!isAlreadyAdded && (
+                  <button type="button" onClick={() => addDetectedModel(m.id, provider.id, providerDef.id)} className="shrink-0 rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-700 hover:bg-blue-100">
+                    选用
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Configured models (compact inline tags) */}
+      {provider.models.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {provider.models.map((model) => {
+            const modelDef = getModelDefById(model.id);
+            const isMain = model.id === activeModel;
+            return (
+              <span key={model.id} className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${isMain ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}>
+                {modelDef?.model.label || model.modelName || model.id}
+                {isMain && " ★"}
+                {!isMain && (
+                  <button type="button" onClick={() => onManageProvider("set_main", { modelId: model.id })} className="text-blue-500 hover:text-blue-700" title="设为主模型">
+                    <Zap className="size-2.5" />
+                  </button>
+                )}
+                <button type="button" onClick={() => onManageProvider("delete_model", { modelId: model.id })} className="text-rose-400 hover:text-rose-600" title="移除">
+                  <Trash2 className="size-2.5" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
     </form>
   );
 }
 
-function ConfiguredModelsTable({
-  configuredModels,
+// ── Test + Prompt Workspace (collapsible, ultra-compact) ──
+
+function TestAndPromptWorkspace({
+  providers,
   activeModel,
-  listMessage,
-  onEdit,
-  onManage,
 }: {
-  configuredModels: ProviderSummary[];
+  providers: ProviderSummary[];
   activeModel: string;
-  listMessage: string;
-  onEdit: (key: string) => void;
-  onManage: (
-    action: "toggle" | "delete" | "priority" | "set_main",
-    payload: Record<string, unknown>,
-  ) => Promise<void>;
 }) {
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h4 className="text-lg font-semibold text-slate-900">已配置成功的模型</h4>
-          <p className="mt-1 text-sm text-slate-500">
-            保存成功后会自动出现在这里。支持删除模型、测试模型、启用/停用模型、设置优先级；当主模型请求错误时，
-            系统会自动切换到下一个已启用模型。
-          </p>
-        </div>
-        {listMessage ? <span className="text-sm text-slate-500">{listMessage}</span> : null}
-      </div>
+  const activeProvider = providers.find((p) => p.models.some((m) => m.id === activeModel));
+  const testableModels = activeProvider?.models.filter((m) => {
+    const def = getModelDefById(m.id);
+    return def?.model.supportsImageTest !== false;
+  }) || [];
+  const selectedModel = testableModels.find((m) => m.id === activeModel) || testableModels[0];
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-        <div className="grid grid-cols-[1.4fr_1fr_90px_90px_120px_1.3fr] bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
-          <span>模型</span>
-          <span>端点</span>
-          <span>状态</span>
-          <span>优先级</span>
-          <span>主模型</span>
-          <span>操作</span>
+  const [prompt, setPrompt] = useState("A premium pet memorial portrait, centered composition, soft studio lighting, elegant circular frame, realistic texture, clean background.");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [sourcePreview, setSourcePreview] = useState<string | null>(null);
+  const [sourceBase64, setSourceBase64] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [generating, setGenerating] = useState(false);
+  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
+
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(true);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => { loadPrompts(); }, []);
+
+  async function loadPrompts() {
+    try {
+      const res = await fetch("/api/providers/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list_prompts" }),
+      });
+      const data = (await res.json()) as { ok?: boolean; prompts?: SavedPrompt[] };
+      if (data.ok && data.prompts) setSavedPrompts(data.prompts);
+    } catch { /* */ }
+    setLoadingPrompts(false);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setResultError("≤10MB"); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = reader.result as string;
+      setSourcePreview(dataUri);
+      setSourceBase64(dataUri);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleFileAndGenerate(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setResultError("≤10MB"); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = reader.result as string;
+      setSourcePreview(dataUri);
+      setSourceBase64(dataUri);
+      await doGenerate(dataUri);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearSourceImage() {
+    setSourcePreview(null);
+    setSourceBase64(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleTest() {
+    if (!selectedModel) { setResultError("请先配置模型"); return; }
+    if (!prompt.trim()) { setResultError("输入提示词"); return; }
+    if (!sourceBase64) { fileInputRef.current?.click(); return; }
+    await doGenerate(sourceBase64);
+  }
+
+  async function doGenerate(srcBase64?: string) {
+    if (!selectedModel) return;
+    setGenerating(true); setResultImageUrl(null); setResultError(null);
+    try {
+      const body: Record<string, unknown> = {
+        modelKey: selectedModel.id,
+        prompt: prompt.trim(),
+        mode: (srcBase64 || sourceBase64) ? "combined" : "text2img",
+      };
+      if (srcBase64) body.sourceImage = srcBase64;
+      else if (sourceBase64) body.sourceImage = sourceBase64;
+
+      const res = await fetch("/api/providers/test-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { ok?: boolean; message?: string; outputImageUrl?: string };
+      if (data.ok && data.outputImageUrl) setResultImageUrl(data.outputImageUrl);
+      else setResultError(data.message || "失败");
+    } catch { setResultError("请求失败"); }
+    setGenerating(false);
+  }
+
+  async function handleSavePrompt() {
+    if (!prompt.trim()) { setSaveMessage({ ok: false, text: "❌ 空" }); return; }
+    setSavingPrompt(true); setSaveMessage(null);
+    try {
+      const res = await fetch("/api/providers/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_prompt",
+          productType: "test",
+          displayName: prompt.trim().slice(0, 30) + "...",
+          promptTemplate: prompt.trim(),
+          negativePrompt: negativePrompt.trim() || null,
+          isActive: true,
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      if (data.ok) { setSaveMessage({ ok: true, text: "✅ 已保存" }); await loadPrompts(); }
+      else setSaveMessage({ ok: false, text: `❌ ${data.message || "失败"}` });
+    } catch { setSaveMessage({ ok: false, text: "❌ 网络错误" }); }
+    setSavingPrompt(false);
+    setTimeout(() => setSaveMessage(null), 3000);
+  }
+
+  async function handleDeletePrompt(id: string) {
+    setDeletingId(id);
+    try { await fetch("/api/providers/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_prompt", promptId: id }) }); await loadPrompts(); } catch { /* */ }
+    setDeletingId(null);
+  }
+
+  async function handleUpdatePrompt(id: string) {
+    try {
+      await fetch("/api/providers/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_prompt", promptId: id, displayName: editName, promptTemplate: prompt.trim() }),
+      });
+      setEditingPromptId(null);
+      await loadPrompts();
+    } catch { /* */ }
+  }
+
+  function applyPrompt(p: SavedPrompt) {
+    setPrompt(p.promptTemplate);
+    setNegativePrompt(p.negativePrompt || "");
+    setResultImageUrl(null);
+    setResultError(null);
+  }
+
+  return (
+    <details className="rounded border border-slate-200 bg-white">
+      <summary className="cursor-pointer px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 select-none">
+        🎨 提示词测试 & 管理
+      </summary>
+      <div className="border-t border-slate-100 px-3 py-2">
+        {/* Prompt row */}
+        <div className="flex items-start gap-1.5">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={2}
+            placeholder="提示词..."
+            className="flex-1 min-w-0 rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] leading-tight text-slate-900 outline-none focus:border-blue-400 resize-none"
+          />
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <button type="button" onClick={handleTest} disabled={generating || !selectedModel} className="inline-flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-violet-700 disabled:opacity-50">
+              {generating ? <LoaderCircle className="size-2.5 animate-spin" /> : <Sparkles className="size-2.5" />}
+              测试
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-0.5 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+              <Upload className="size-2.5" />
+              {sourcePreview ? "换" : "图"}
+            </button>
+            <button type="button" onClick={handleSavePrompt} disabled={savingPrompt || !prompt.trim()} className="inline-flex items-center gap-0.5 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+              <Save className="size-2.5" />
+              存
+            </button>
+          </div>
         </div>
-        {configuredModels.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-slate-500">还没有成功保存的模型。</div>
-        ) : (
-          configuredModels.map((model) => (
-            <ConfiguredModelRow
-              key={model.key}
-              model={model}
-              isMain={model.key === activeModel}
-              onEdit={() => onEdit(model.key)}
-              onManage={onManage}
-            />
-          ))
+
+        {/* Negative prompt */}
+        <details className="mt-0.5">
+          <summary className="text-[9px] text-slate-400 cursor-pointer hover:text-slate-600">负向</summary>
+          <input value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="排除..." className="mt-0.5 w-full rounded border border-slate-200 px-1.5 py-0.5 text-[10px] outline-none" />
+        </details>
+
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileAndGenerate} className="hidden" />
+
+        {/* Source thumb */}
+        {sourcePreview && (
+          <div className="mt-0.5 flex items-center gap-1">
+            <img src={sourcePreview} alt="" className="h-5 w-5 rounded object-cover" />
+            <button type="button" onClick={clearSourceImage} className="text-slate-400 hover:text-slate-600"><X className="size-2.5" /></button>
+          </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-function ConfiguredModelRow({
-  model,
-  isMain,
-  onEdit,
-  onManage,
-}: {
-  model: ProviderSummary;
-  isMain: boolean;
-  onEdit: () => void;
-  onManage: (
-    action: "toggle" | "delete" | "priority" | "set_main",
-    payload: Record<string, unknown>,
-  ) => Promise<void>;
-}) {
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [testingImage, setTestingImage] = useState(false);
+        {/* Messages */}
+        {saveMessage && <p className={`mt-0.5 text-[9px] ${saveMessage.ok ? "text-emerald-600" : "text-rose-600"}`}>{saveMessage.text}</p>}
+        {resultError && <p className="mt-0.5 text-[9px] text-rose-600">❌ {resultError}</p>}
 
-  async function testConnection() {
-    setTestingConnection(true);
-    await fetch("/api/providers/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modelKey: model.key }),
-    });
-    setTestingConnection(false);
-  }
-
-  async function testImage() {
-    setTestingImage(true);
-    await fetch("/api/providers/test-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        modelKey: model.key,
-        prompt:
-          "A premium pet memorial portrait, centered composition, soft studio lighting, elegant circular frame, realistic texture, clean background.",
-      }),
-    });
-    setTestingImage(false);
-  }
-
-  return (
-    <div className="grid grid-cols-[1.4fr_1fr_90px_90px_120px_1.3fr] items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-slate-900">{model.label}</span>
-          {model.hasApiKey ? (
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">已保存 Key</span>
-          ) : null}
-        </div>
-        <div className="mt-1 text-xs text-slate-500">{model.option?.provider}</div>
-      </div>
-      <div className="truncate text-xs text-slate-500">{model.webhookUrl || "未配置端点"}</div>
-      <div>
-        <button
-          type="button"
-          onClick={() => onManage("toggle", { modelKey: model.key, enabled: !model.isEnabled })}
-          className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700"
-        >
-          {model.isEnabled ? <ToggleRight className="size-3.5" /> : <ToggleLeft className="size-3.5" />}
-          {model.isEnabled ? "启用" : "停用"}
-        </button>
-      </div>
-      <div className="text-slate-700">{model.priority}</div>
-      <div>
-        {isMain ? (
-          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs text-blue-700">主模型</span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onManage("set_main", { modelKey: model.key })}
-            className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-700"
-          >
-            设为主模型
-          </button>
+        {/* Result */}
+        {resultImageUrl && (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <img src={resultImageUrl} alt="" className="h-12 w-12 rounded object-cover border border-slate-200" />
+            <a href={resultImageUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline">原图</a>
+          </div>
         )}
+
+        {/* Saved prompts list */}
+        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
+          <p className="text-[9px] font-medium text-slate-500 mb-0.5">已保存</p>
+          {loadingPrompts ? (
+            <p className="text-[9px] text-slate-400">...</p>
+          ) : savedPrompts.length === 0 ? (
+            <p className="text-[9px] text-slate-400">暂无</p>
+          ) : (
+            <div className="space-y-px max-h-20 overflow-y-auto">
+              {savedPrompts.map((p) => (
+                <div key={p.id} className="group flex items-center gap-0.5 rounded px-1 py-px hover:bg-slate-50 text-[10px]">
+                  {editingPromptId === p.id ? (
+                    <div className="flex-1 flex items-center gap-0.5">
+                      <input value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 min-w-0 rounded border border-slate-200 px-1 py-px text-[9px] outline-none" />
+                      <button type="button" onClick={() => handleUpdatePrompt(p.id)} className="text-blue-600"><Check className="size-2.5" /></button>
+                      <button type="button" onClick={() => setEditingPromptId(null)} className="text-slate-400"><X className="size-2.5" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => applyPrompt(p)} className="flex-1 text-left min-w-0 truncate text-slate-700 hover:text-blue-600" title={p.promptTemplate}>
+                        {p.displayName}
+                      </button>
+                      <button type="button" onClick={() => { setEditingPromptId(p.id); setEditName(p.displayName); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600">
+                        <Pencil className="size-2" />
+                      </button>
+                      <button type="button" onClick={() => handleDeletePrompt(p.id)} disabled={deletingId === p.id} className="opacity-0 group-hover:opacity-100 text-rose-400 hover:text-rose-600">
+                        {deletingId === p.id ? <LoaderCircle className="size-2 animate-spin" /> : <Trash2 className="size-2" />}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onEdit} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-          编辑
-        </button>
-        <button
-          type="button"
-          onClick={testConnection}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-        >
-          {testingConnection ? <LoaderCircle className="size-3.5 animate-spin" /> : "测 API"}
-        </button>
-        <button
-          type="button"
-          onClick={testImage}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-        >
-          {testingImage ? <LoaderCircle className="size-3.5 animate-spin" /> : "测生图"}
-        </button>
-        <button
-          type="button"
-          onClick={() => onManage("priority", { modelKey: model.key, priority: Math.max(1, model.priority - 1) })}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-        >
-          提高优先级
-        </button>
-        <button
-          type="button"
-          onClick={() => onManage("delete", { modelKey: model.key })}
-          className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-        >
-          <Trash2 className="size-3.5" />
-          删除
-        </button>
-      </div>
-    </div>
+    </details>
   );
 }
 
-function ProviderTools({ option }: { option: (typeof MODEL_OPTIONS)[number] }) {
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [testingImage, setTestingImage] = useState(false);
-  const [message, setMessage] = useState("");
-  const [previewUrl, setPreviewUrl] = useState("");
+// ── Helpers ──
 
-  async function testConnection() {
-    setTestingConnection(true);
-    setMessage("");
-    setPreviewUrl("");
-    const response = await fetch("/api/providers/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modelKey: option.key }),
-    });
-    const payload = (await response.json()) as { message?: string };
-    setMessage(payload.message || (response.ok ? "配置正常" : "配置异常"));
-    setTestingConnection(false);
-  }
-
-  async function testImage() {
-    setTestingImage(true);
-    setMessage("");
-    setPreviewUrl("");
-    const response = await fetch("/api/providers/test-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        modelKey: option.key,
-        prompt:
-          "A premium pet memorial portrait, centered composition, soft studio lighting, elegant circular frame, realistic texture, clean background.",
-      }),
-    });
-    const payload = (await response.json()) as { message?: string; outputImageUrl?: string };
-    setMessage(payload.message || (response.ok ? "测试完成" : "测试失败"));
-    setPreviewUrl(payload.outputImageUrl || "");
-    setTestingImage(false);
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={testConnection}
-        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
-      >
-        {testingConnection ? <LoaderCircle className="size-4 animate-spin" /> : <TestTube2 className="size-4" />}
-        测试 API
-      </button>
-      <button
-        type="button"
-        onClick={testImage}
-        disabled={!option.supportsImageTest || testingImage}
-        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-      >
-        {testingImage ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
-        生图测试
-      </button>
-      {message ? <span className="text-xs text-slate-500">{message}</span> : null}
-      {previewUrl ? (
-        <a href={previewUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-600 underline">
-          打开测试图
-        </a>
-      ) : null}
-    </div>
-  );
+async function onManageProvider(action: string, payload: Record<string, unknown>) {
+  await fetch("/api/providers/manage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...payload }) });
+  window.location.reload();
 }
 
-function Field({
-  label,
-  name,
-  placeholder,
-  defaultValue,
-}: {
-  label: string;
-  name: string;
-  placeholder?: string;
-  defaultValue?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="text-sm text-slate-600">{label}</label>
-      <input
-        name={name}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-      />
-    </div>
-  );
+async function addDetectedModel(modelId: string, providerId: string, providerDefId: string) {
+  await fetch("/api/providers/manage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "add_model", providerId, modelId, adapter: guessAdapter(modelId, providerDefId), endpoint: guessEndpoint(providerDefId) }),
+  });
+  window.location.reload();
+}
+
+function guessAdapter(modelId: string, providerDefId: string): string {
+  const id = modelId.toLowerCase();
+  if (providerDefId === "stability") return "stability";
+  if (providerDefId === "replicate") return "replicate";
+  if (providerDefId === "google") return "gemini";
+  if (providerDefId === "fal") return "fal-queue";
+  if (providerDefId === "midjourney") return "midjourney-async";
+  if (providerDefId === "dashscope") return "dashscope-async";
+  if (providerDefId === "volcengine") return "volcengine-async";
+  if (providerDefId === "xfyun") return "xfyun-async";
+  if (id.includes("sora")) return "openai-chat-image";
+  if (id.includes("doubao") || id.includes("seedream")) return "openai-chat-image";
+  if (id.includes("gemini")) return "openai-chat-image";
+  if (id.includes("wan")) return "dashscope-async";
+  if (id.includes("gpt-image") || id.includes("dall")) return "openai-images";
+  if (id.includes("flux") || id.includes("ideogram") || id.includes("banana") || id.includes("nano")) return "openai-chat-image";
+  return "openai-chat-image";
+}
+
+function guessEndpoint(providerDefId: string): string {
+  const def = getProviderById(providerDefId);
+  if (def?.models[0]) return def.models[0].defaultEndpoint;
+  if (providerDefId === "poloai" || providerDefId === "custom") return "/chat/completions";
+  return "/v1/images/generations";
 }
