@@ -278,11 +278,20 @@ export function StatusPill({ status }: { status: string }) {
   const styles =
     normalized === "ordered"
       ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-      : normalized === "generated"
-        ? "border-sky-200 bg-sky-50 text-sky-600"
-        : "border-slate-200 bg-white text-slate-500";
+      : normalized === "confirmed"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : normalized === "generated"
+          ? "border-sky-200 bg-sky-50 text-sky-600"
+          : "border-slate-200 bg-white text-slate-500";
 
-  const label = normalized === "ordered" ? "已下单" : normalized === "generated" ? "已生成" : status;
+  const label =
+    normalized === "ordered"
+      ? "已下单"
+      : normalized === "confirmed"
+        ? "已确认设计"
+        : normalized === "generated"
+          ? "已生成"
+          : status;
 
   return <span className={cn("rounded-lg border px-2.5 py-0.5 text-xs", styles)}>{label}</span>;
 }

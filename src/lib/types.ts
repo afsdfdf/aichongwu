@@ -81,6 +81,7 @@ export type GenerationRecord = {
   orderName: string | null;
   orderNumber: string | null;
   status: string;
+  designConfirmedAt: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;

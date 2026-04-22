@@ -15,8 +15,14 @@ export async function GET() {
   root.dataset.aiWidgetMounted = "1";
 
   const apiBase = root.dataset.apiBase || "https://aichongwu.vercel.app";
-  const accentColor = "#2B473F";
-  const buttonLabel = "Upload Your Pet Photo";
+  const accentColor =
+    ${JSON.stringify(setting.widgetAccentColor)} && ${JSON.stringify(setting.widgetAccentColor)} !== "#0ea5e9"
+      ? ${JSON.stringify(setting.widgetAccentColor)}
+      : "#2B473F";
+  const buttonLabel =
+    ${JSON.stringify(setting.widgetButtonText)} && ${JSON.stringify(setting.widgetButtonText)} !== "生成效果图"
+      ? ${JSON.stringify(setting.widgetButtonText)}
+      : "Upload Your Pet Photo";
   const config = {
     shopDomain: root.dataset.shopDomain || "",
     productId: root.dataset.productId || "",
@@ -66,11 +72,14 @@ export async function GET() {
   if (config.requireGeneration) setButtonLocked(true);
 
   root.innerHTML =
-    \`<style>
+    \`<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&display=swap" rel="stylesheet">
+    <style>
       #mm-root, #mm-modal { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       #mm-root * { box-sizing: border-box; }
       #mm-upload-btn,.mm-modal-box .mm-choose-btn,.mm-modal-box #mm-reupload-btn,.mm-modal-box #mm-confirm-btn,.mm-wizard-next,.mm-wizard-back { border-radius: 8px !important; }
       .product-form__buttons { margin-bottom: 24px !important; }
+      #mm-wrapper { width: 100%; }
+
       .mm-trust-points { padding: 4px 0 16px; margin-top: -20px; }
       .mm-tp-item { display:flex; align-items:flex-start; gap:10px; padding:5px 0; font-size:14px; line-height:1.5; color:#6B5E54; }
       .mm-tp-check { flex-shrink:0; width:20px; height:20px; background:\${accentColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-top:1px; }
@@ -78,7 +87,11 @@ export async function GET() {
       .mm-tp-item strong { font-weight:600; color:#1A1612; }
       #mm-upload-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:\${accentColor}; color:#fff; cursor:pointer; transition:opacity .2s; margin-bottom:0; }
       #mm-upload-btn:hover { opacity:0.9; }
+      #mm-upload-btn svg { flex-shrink:0; }
+      #mm-upload-btn.mm-selected { background:#065f46; border:2px solid #065f46; color:#fff; }
       .mm-free-tag { background:#C8956C; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px; letter-spacing:.5px; text-transform:uppercase; line-height:1.3; flex-shrink:0; }
+
+
       .mm-social-proof { text-align:center; margin-top:8px; margin-bottom:8px; font-size:12px; color:#aaa; }
       .mm-mini-steps { display:flex; align-items:flex-start; gap:0; padding:16px 0; margin-bottom:16px; }
       .mm-mini-step { flex:1; text-align:center; position:relative; }
@@ -99,6 +112,8 @@ export async function GET() {
       .mm-photo-tips li { font-size:13px; color:#6B5E54; padding:3px 0; padding-left:20px; position:relative; line-height:1.5; }
       .mm-photo-tips li::before { content:"•"; position:absolute; left:6px; color:#4A6B4A; font-weight:700; }
       .mm-choose-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; font-size:15px; font-weight:700; border:none; background:\${accentColor}; color:#fff; cursor:pointer; border-radius:8px; }
+      .mm-choose-btn svg { flex-shrink:0; }
+
       #mm-images-row { display:flex; align-items:center; justify-content:space-between; gap:36px; margin-bottom:20px; }
       .mm-img-col { flex:0 0 300px; text-align:center; }
       .mm-img-col img { width:300px; max-width:300px; max-height:300px; object-fit:contain; border-radius:8px; display:block; margin:0 auto; }
@@ -185,8 +200,8 @@ export async function GET() {
         <div class="mm-mini-step"><div class="mm-mini-step-num">3</div><div class="mm-mini-step-label">Choose<br>Color</div><span class="mm-step-arrow">›</span></div>
         <div class="mm-mini-step"><div class="mm-mini-step-num">4</div><div class="mm-mini-step-label">Place<br>Order</div></div>
       </div>
-      <div id="mm-next-wrap" style="display:none"><button type="button" id="mm-wizard-next" class="mm-wizard-next">Next: Choose Leather Color</button></div>
-      <div id="mm-back-wrap" style="display:none"><button type="button" id="mm-wizard-back" class="mm-wizard-back">Back to Design</button></div>
+      <div id="mm-next-wrap" style="display:none"><button type="button" id="mm-wizard-next" class="mm-wizard-next">Next: Choose Leather Color <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-left:4px"><polyline points="9 18 15 12 9 6"></polyline></svg></button></div>
+      <div id="mm-back-wrap" style="display:none"><button type="button" id="mm-wizard-back" class="mm-wizard-back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="15 18 9 12 15 6"></polyline></svg> Back to Design</button></div>
     </div>
     <div id="mm-modal" class="mm-modal-overlay">
       <div class="mm-modal-box">
@@ -201,7 +216,8 @@ export async function GET() {
               <li>Pet's face should be the main focus</li>
             </ul>
           </div>
-          <button type="button" id="mm-choose-btn" class="mm-choose-btn">Generate My Free Preview</button>
+          <button type="button" id="mm-choose-btn" class="mm-choose-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Generate My Free Preview</button>
+
         </div>
         <div id="mm-step-process" style="display:none">
           <h2 class="mm-modal-title">Preview Your Custom Design</h2>
@@ -275,6 +291,7 @@ export async function GET() {
   const backBtn = root.querySelector("#mm-wizard-back");
 
   let resultUrl = "";
+  let currentGenerationId = "";
   let fakeTimer = null;
   let fakeProgress = 0;
 
@@ -339,6 +356,7 @@ export async function GET() {
     statusText.textContent = "Creating your free preview...";
     statusSub.textContent = "This usually takes 20-30 seconds";
     resultUrl = "";
+    currentGenerationId = "";
     if (fakeTimer) clearInterval(fakeTimer);
     fakeProgress = 0;
   }
@@ -365,9 +383,11 @@ export async function GET() {
   function stopFakeProgress() {
     if (fakeTimer) clearInterval(fakeTimer);
     progressFill.style.width = "100%";
-    statusText.textContent = "Done!";
-    statusSub.style.display = "none";
+    statusText.textContent = "Preview ready";
+    statusSub.style.display = "";
+    statusSub.textContent = "Review your design, then use it to unlock color selection";
   }
+
 
   async function generateFromFile(file) {
     stepUpload.style.display = "none";
@@ -398,13 +418,15 @@ export async function GET() {
     reuploadBtn.style.display = "inline-block";
     confirmBtn.style.display = "inline-block";
     resultUrl = data.outputImageUrl;
+    currentGenerationId = data.generationId;
 
     upsertHiddenInput("properties[_AI Generation ID]", data.generationId);
     upsertHiddenInput("properties[_AI Preview URL]", data.outputImageUrl);
     upsertHiddenInput("properties[_AI Model]", data.modelUsed);
     upsertHiddenInput("properties[_AI Prompt]", data.promptUsed);
+    upsertHiddenInput("properties[_AI Design Confirmed]", "no");
+    upsertHiddenInput("properties[_AI Design Confirmed At]", "");
 
-    if (config.requireGeneration && addToCartButton) setButtonLocked(false);
     if (!isLoggedIn()) addGenCount();
   }
 
@@ -446,15 +468,38 @@ export async function GET() {
     }
   });
 
-  confirmBtn.addEventListener("click", () => {
-    closeModal();
-    if (hiddenMaterialUrl) hiddenMaterialUrl.value = resultUrl;
-    uploadBtn.innerHTML = "✓ Design Selected";
-    uploadBtn.style.background = "#065f46";
-    uploadBtn.style.border = "2px solid #065f46";
-    uploadBtn.style.color = "#fff";
-    nextWrap.style.display = "block";
+  confirmBtn.addEventListener("click", async () => {
+    try {
+      confirmBtn.setAttribute("disabled", "disabled");
+      confirmBtn.style.opacity = "0.7";
+      const response = await fetch(apiBase + "/api/generate/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generationId: currentGenerationId,
+          shopDomain: config.shopDomain,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to confirm design");
+
+      upsertHiddenInput("properties[_AI Design Confirmed]", "yes");
+      upsertHiddenInput("properties[_AI Design Confirmed At]", data.designConfirmedAt || "");
+      if (config.requireGeneration && addToCartButton) setButtonLocked(false);
+      closeModal();
+      if (hiddenMaterialUrl) hiddenMaterialUrl.value = resultUrl;
+      uploadBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Design Selected`;
+      uploadBtn.classList.add("mm-selected");
+      nextBtn.innerHTML = `Next: Choose Leather Color <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-left:4px"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+      nextWrap.style.display = "block";
+    } catch (error) {
+      setMessage(error?.message || "Failed to confirm design", "err");
+    } finally {
+      confirmBtn.removeAttribute("disabled");
+      confirmBtn.style.opacity = "1";
+    }
   });
+
 
   setStep(1);
 })();

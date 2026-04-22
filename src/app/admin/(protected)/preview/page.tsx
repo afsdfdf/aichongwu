@@ -89,48 +89,79 @@ export default async function PreviewPage() {
 
       <PreviewCard title="Plugin 05 - Next / Back buttons">
         <div className="space-y-3">
-          <button className="block w-full rounded-lg bg-[#2B473F] px-4 py-3 text-sm font-bold uppercase tracking-[0.05em] text-white">
+          <button className="flex w-full items-center justify-center rounded-lg bg-[#2B473F] px-4 py-[14px] text-[15px] font-bold uppercase tracking-[0.05em] text-white">
             Next: Choose Leather Color
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="ml-1"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
           </button>
-          <button className="block w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-[#1A1612]">
+          <button className="flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-[10px] text-sm font-semibold text-[#1A1612]">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mr-1"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
             Back to Design
           </button>
         </div>
       </PreviewCard>
 
       <PreviewCard title="Plugin 06 - Modal entry">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6">
-          <h3 className="text-center font-serif text-3xl font-semibold text-[#1A1612]">Preview Your Custom Design</h3>
-          <div className="mt-5 rounded-2xl bg-[#F9F6F2] p-5">
+        <div className="rounded-3xl border border-slate-200 bg-white px-[52px] py-[42px]">
+          <h3 className="text-center font-serif text-[26px] font-semibold text-[#1A1612]">Preview Your Custom Design</h3>
+          <div className="mt-5 rounded-lg bg-[#F9F6F2] px-5 py-4">
             <p className="text-sm font-semibold text-[#1A1612]">📸 Photo tips for best results:</p>
-            <ul className="mt-3 space-y-2 text-sm text-[#6B5E54]">
+            <ul className="mt-3 space-y-2 text-[13px] text-[#6B5E54]">
               <li>One pet per photo works best</li>
               <li>Clear, front-facing with good lighting</li>
               <li>Pet&apos;s face should be the main focus</li>
             </ul>
           </div>
-          <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#2B473F] px-4 py-3 text-sm font-bold text-white">
+          <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#2B473F] px-4 py-[14px] text-[15px] font-bold text-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
             Generate My Free Preview
           </button>
         </div>
       </PreviewCard>
 
       <PreviewCard title="Plugin 07 - Processing / result state">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6">
-          <div className="grid gap-6 lg:grid-cols-[0.9fr_0.7fr_0.9fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white px-[52px] py-[42px]">
+          <div className="grid gap-9 lg:grid-cols-[300px_300px_300px] lg:justify-between">
             <div className="text-center">
-              <span className="mb-3 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Photo</span>
-              <div className="aspect-square rounded-xl bg-[linear-gradient(180deg,#d9ddd1_0%,#b6b9aa_100%)]" />
-              <div className="mx-auto mt-4 max-w-xs">
-                <p className="text-sm text-[#6B5E54]">Uploading your photo...</p>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+              <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Photo</span>
+              <div className="mx-auto aspect-square w-[300px] rounded-lg bg-[linear-gradient(180deg,#d9ddd1_0%,#b6b9aa_100%)]" />
+              <div className="mx-auto mt-[14px] w-full max-w-[300px] text-center">
+                <p className="mb-2 text-[13px] text-[#6B5E54]">Uploading your photo...</p>
+                <div className="h-1 overflow-hidden rounded-full bg-slate-200">
                   <div className="h-full w-3/4 rounded-full bg-[#4A6B4A]" />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center gap-4">
-              <p className="max-w-xs text-center text-sm leading-7 text-[#6B5E54]">
+            <div className="flex flex-col items-center justify-center gap-[18px]">
+              <p className="mx-auto max-w-[300px] text-center text-[15px] leading-[1.65] text-[#6B5E54]">
                 This is a style preview — your final piece will be a handcrafted raised-relief leather keychain. Your generated preview will appear to the right.
               </p>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2B473F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -140,20 +171,27 @@ export default async function PreviewPage() {
             </div>
 
             <div className="text-center">
-              <span className="mb-3 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Design</span>
-              <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+              <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Your Design</span>
+              <div className="flex min-h-[220px] w-[300px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
                 <div className="text-center">
-                  <div className="mx-auto size-9 animate-spin rounded-full border-4 border-slate-200 border-t-[#4A6B4A]" />
-                  <p className="mt-3 text-sm text-[#6B5E54]">Creating your free preview...</p>
-                  <p className="mt-1 text-xs text-[#aaa]">This usually takes 20–30 seconds</p>
+                  <div className="mx-auto size-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-[#4A6B4A]" />
+                  <p className="mt-3 text-[13px] text-[#6B5E54]">Preview ready</p>
+                  <p className="mt-1 max-w-[210px] text-[11px] leading-5 text-[#aaa]">Review your design, then use it to unlock color selection</p>
+                  <div className="mx-auto mt-2 h-1 w-4/5 overflow-hidden rounded-sm bg-slate-200">
+                    <div className="h-full w-full bg-[#4A6B4A]" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button className="rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-[#1A1612]">Try Again</button>
-            <button className="rounded-lg bg-[#2B473F] px-4 py-3 text-sm font-semibold text-white">Use This Design</button>
+          <div className="mt-[22px] flex flex-wrap justify-center gap-4">
+            <button className="w-[320px] max-w-[42%] rounded-lg border border-slate-300 bg-white px-6 py-[14px] text-sm font-semibold text-[#1A1612]">
+              Try Again
+            </button>
+            <button className="w-[320px] max-w-[42%] rounded-lg bg-[#2B473F] px-6 py-[14px] text-sm font-semibold text-white">
+              Use This Design
+            </button>
           </div>
         </div>
       </PreviewCard>
@@ -182,7 +220,7 @@ export default async function PreviewPage() {
             <div className="rounded-2xl border border-[#eadfce] bg-white p-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-[#8c7765]">Step 3 - Choose Color</p>
-                <p className="text-xs text-[#8c7765]">Next / Back buttons control this transition</p>
+                <p className="text-xs text-[#8c7765]">Unlocked after Design Selected + Use This Design</p>
               </div>
               <div className="product-detail__variant-picker grid gap-3 sm:grid-cols-3">
                 <ColorChoice label="Walnut" color="#8a5c3b" />

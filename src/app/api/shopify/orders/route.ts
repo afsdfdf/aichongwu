@@ -30,12 +30,13 @@ export async function POST(request: Request) {
   const shopDomain = request.headers.get("x-shopify-shop-domain") || process.env.DEFAULT_SHOP_DOMAIN || "";
   const payload = JSON.parse(rawBody) as ShopifyOrderPayload;
   const lineItems = payload.line_items ?? [];
+  let matchedCount = 0;
 
   for (const item of lineItems) {
     const generationId = getProperty(item.properties, "_AI Generation ID");
     if (!generationId) continue;
 
-    await updateGenerationOrderData({
+    const updated = await updateGenerationOrderData({
       generationId,
       shopDomain,
       orderId: String(payload.id),
@@ -45,7 +46,10 @@ export async function POST(request: Request) {
       customerId: payload.customer?.id ? String(payload.customer.id) : null,
       status: "ordered",
     });
+
+    if (updated) matchedCount += 1;
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, matchedCount });
 }
+

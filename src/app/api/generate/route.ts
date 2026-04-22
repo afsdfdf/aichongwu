@@ -76,6 +76,7 @@ export async function POST(request: Request) {
       orderName: null,
       orderNumber: null,
       status: "generated",
+      designConfirmedAt: null,
       metadata: generated.metadata ?? null,
     });
 

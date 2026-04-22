@@ -315,8 +315,8 @@ function ensureDefaultSetting(shopDomain: string, existing?: StoreSettingRecord)
       shopDomain,
       activeModel: "gpt-image-1",
       requireGeneration: true,
-      widgetAccentColor: "#0ea5e9",
-      widgetButtonText: "生成效果图",
+      widgetAccentColor: "#2B473F",
+      widgetButtonText: "Upload Your Pet Photo",
       createdAt: now,
       updatedAt: now,
     }
@@ -747,6 +747,32 @@ export async function listGenerationRecords(shopDomain: string) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function updateGenerationStatus(input: {
+  generationId: string;
+  shopDomain: string;
+  status: string;
+  designConfirmedAt?: string | null;
+}) {
+  let updated = false;
+
+  await mutateState((state) => ({
+    ...state,
+    generations: state.generations.map((item) =>
+      item.id === input.generationId && item.shopDomain === input.shopDomain
+        ? ((updated = true), {
+            ...item,
+            status: input.status,
+            designConfirmedAt:
+              input.designConfirmedAt === undefined ? item.designConfirmedAt : input.designConfirmedAt,
+            updatedAt: nowIso(),
+          })
+        : item,
+    ),
+  }));
+
+  return updated;
+}
+
 export async function updateGenerationOrderData(input: {
   generationId: string;
   shopDomain: string;
@@ -757,11 +783,13 @@ export async function updateGenerationOrderData(input: {
   customerId: string | null;
   status: string;
 }) {
+  let updated = false;
+
   await mutateState((state) => ({
     ...state,
     generations: state.generations.map((item) =>
       item.id === input.generationId && item.shopDomain === input.shopDomain
-        ? {
+        ? ((updated = true), {
             ...item,
             orderId: input.orderId,
             orderNumber: input.orderNumber,
@@ -770,10 +798,12 @@ export async function updateGenerationOrderData(input: {
             customerId: input.customerId,
             status: input.status,
             updatedAt: nowIso(),
-          }
+          })
         : item,
     ),
   }));
+
+  return updated;
 }
 
 export async function listImportedAssets() {
