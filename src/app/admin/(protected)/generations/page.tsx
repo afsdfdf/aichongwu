@@ -1,4 +1,8 @@
+import Link from "next/link";
 import { Search, SlidersHorizontal } from "lucide-react";
+import { FormCard } from "@/components/admin/FormCard";
+import { PageHeader } from "@/components/admin/PageHeader";
+import { StickyActionBar } from "@/components/admin/StickyActionBar";
 import { GenerationGallery } from "@/components/generation-gallery";
 import { HistorySyncForm } from "@/components/history-sync-form";
 import { listGenerationRecords } from "@/lib/store";
@@ -50,31 +54,36 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
   const orderedCount = filteredRows.filter((item) => item.orderId).length;
 
   return (
-    <>
-      <section className="admin-page-header">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="admin-page-header-kicker">Generations Gallery</p>
-            <h1 className="admin-page-header-title mt-2">效果图画廊</h1>
-            <p className="admin-page-header-description mt-2">
-              默认显示效果图，支持查看原图、批量勾选下载与历史记录同步。
-            </p>
-          </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="效果图画廊"
+        description="默认显示效果图，支持查看原图、批量下载、历史记录同步与多条件筛选。"
+        actions={
+          <>
+            <Link
+              href="/admin"
+              className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              返回总览
+            </Link>
+            <HistorySyncForm />
+          </>
+        }
+      />
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MetricCard label="当前结果数" value={filteredRows.length} note="按当前筛选条件统计" />
-            <MetricCard label="已下单" value={orderedCount} note="已关联订单的记录" />
-            <MetricCard label="待转化" value={filteredRows.length - orderedCount} note="尚未形成订单" />
-          </div>
-        </div>
-      </section>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <FormCard title="当前结果数" description="按当前筛选条件统计。">
+          <p className="text-3xl font-semibold text-slate-900">{filteredRows.length}</p>
+        </FormCard>
+        <FormCard title="已下单" description="已经关联 Shopify 订单的记录。">
+          <p className="text-3xl font-semibold text-slate-900">{orderedCount}</p>
+        </FormCard>
+        <FormCard title="待转化" description="已生成但尚未形成订单。">
+          <p className="text-3xl font-semibold text-slate-900">{filteredRows.length - orderedCount}</p>
+        </FormCard>
+      </div>
 
-      <div className="admin-panel p-4 sm:p-5">
-        <div className="mb-4 flex flex-col gap-1.5">
-          <p className="text-sm font-semibold text-slate-900">筛选与同步</p>
-          <p className="admin-muted-note">支持按状态、商品类型、模型和关键词快速缩小结果范围。</p>
-        </div>
-
+      <FormCard title="筛选与同步" description="按状态、商品类型、模型和关键词缩小结果范围。">
         <form className="space-y-3">
           <div className="flex flex-col gap-3 lg:flex-row">
             <label className="relative block lg:flex-1">
@@ -93,7 +102,6 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
               <SlidersHorizontal className="size-4" />
               应用筛选
             </button>
-            <HistorySyncForm />
           </div>
 
           <div className="grid gap-3 lg:grid-cols-3">
@@ -131,23 +139,25 @@ export default async function GenerationsPage({ searchParams }: PageProps) {
             </label>
           </div>
         </form>
-      </div>
+      </FormCard>
 
       {filteredRows.length === 0 ? (
-        <div className="admin-panel p-6 text-sm text-slate-500">没有匹配的记录。</div>
+        <FormCard title="暂无结果" description="没有匹配当前筛选条件的记录。">
+          <p className="text-sm text-slate-500">可以清空筛选条件，或者先去前台生成新的效果图。</p>
+        </FormCard>
       ) : (
         <GenerationGallery rows={filteredRows} />
       )}
-    </>
-  );
-}
 
-function MetricCard({ label, value, note }: { label: string; value: number; note: string }) {
-  return (
-    <article className="admin-soft-card px-4 py-3.5">
-      <p className="text-sm text-slate-500">{label}</p>
-      <h2 className="mt-1 text-2xl font-semibold text-slate-900">{value}</h2>
-      <p className="mt-1 text-xs text-slate-400">{note}</p>
-    </article>
+      <StickyActionBar>
+        <span className="mr-auto text-sm text-slate-500">需要补历史记录时，可点击顶部“同步历史”按钮重新从 S3 导入。</span>
+        <Link
+          href="/admin/install"
+          className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          查看安装文档
+        </Link>
+      </StickyActionBar>
+    </div>
   );
 }

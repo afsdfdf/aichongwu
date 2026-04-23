@@ -1,15 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getProviderById } from "@/lib/catalog";
 import { requireAdminSession } from "@/lib/auth";
 import {
-  deletePromptRecord,
+  removePromptTemplate,
+  saveConnection,
+  savePromptTemplateWithVersion,
+  saveRoutePolicy,
+  saveSystemSettings,
+} from "@/lib/config-center/service";
+import {
   getStoreContext,
   importExistingBucketAssets,
-  savePromptRecord,
-  saveProviderRecord,
-  saveStoreSettingRecord,
   syncHistoricalGenerationsFromBucket,
 } from "@/lib/store";
 import { formatDateTimeISO, getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
@@ -28,18 +30,18 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   const isActive = formData.get("isActive") === "on";
 
   if (!productType || !displayName || !promptTemplate) {
-    return { ok: false, message: "请完整填写产品类型、显示名称和提示词。" };
+    return { ok: false, message: "请完整填写商品类型、显示名称和提示词。" };
   }
 
-  await savePromptRecord({
-    id: id || undefined,
-    shopDomain: getDefaultShopDomain(),
+  await savePromptTemplateWithVersion({
+    templateId: id || undefined,
+    name: displayName,
     productType,
     displayName,
     promptTemplate,
     negativePrompt: negativePrompt || null,
     aspectRatio: aspectRatio || null,
-    isActive,
+    publish: isActive,
   });
 
   revalidatePath("/admin");
@@ -56,7 +58,7 @@ export async function deletePromptAction(_prevState: ActionState, formData: Form
   await requireAdminSession();
   const id = String(formData.get("id") || "");
   if (id) {
-    await deletePromptRecord(id);
+    await removePromptTemplate(id);
   }
   revalidatePath("/admin/prompts");
   revalidatePath("/admin");
@@ -69,64 +71,56 @@ export async function saveStoreSettingAction(
 ): Promise<ActionState> {
   await requireAdminSession();
 
-  const { setting } = await getStoreContext(getDefaultShopDomain());
+  const { setting, providers } = await getStoreContext(getDefaultShopDomain());
 
   const providerId = String(formData.get("providerId") || "").trim();
   const activeModel = String(formData.get("activeModel") || setting.activeModel || "gpt-image-1");
   const apiKey = String(formData.get("apiKey") || "");
   const baseUrl = String(formData.get("baseUrl") || "").trim();
   const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
-  const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "生成效果图");
+  const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "Upload Your Pet Photo");
 
-  await saveStoreSettingRecord({
-    shopDomain: getDefaultShopDomain(),
-    activeModel,
-    requireGeneration: setting.requireGeneration,
+  await saveSystemSettings({
+    shopifyStoreDomain: getDefaultShopDomain(),
     widgetAccentColor,
     widgetButtonText,
+    requireGenerationBeforeAddToCart: setting.requireGeneration,
   });
 
   if (providerId) {
-    const providerDef = getProviderById(providerId);
-    const label = providerDef?.label || providerId;
+    const provider = providers.find((item) => item.id === providerId || item.providerDefId === providerId);
 
-    const models: Array<{
-      id: string;
-      modelName: string;
-      endpoint: string | null;
-      isEnabled: boolean;
-      priority: number;
-    }> = [];
-
-    for (const [key, value] of formData.entries()) {
-      const match = key.match(/^model_(.+)_modelName$/);
-      if (!match) continue;
-
-      const modelId = match[1];
-      const modelName = String(value || "").trim();
-      const endpoint = String(formData.get(`model_${modelId}_endpoint`) || "").trim() || null;
-      const priority = Math.max(1, Number(formData.get(`model_${modelId}_priority`) || 1));
-
-      if (modelName) {
-        models.push({ id: modelId, modelName, endpoint, isEnabled: true, priority });
+    if (provider) {
+      for (const model of provider.models) {
+        await saveConnection({
+          id: `${provider.id}:${model.id}`,
+          legacyProviderId: provider.id,
+          modelCode: model.id,
+          modelDisplayName: model.modelName,
+          endpointPath: model.endpoint,
+          enabled: model.isEnabled,
+          priority: model.priority,
+          baseUrl: baseUrl || provider.baseUrl || null,
+          secret: apiKey || undefined,
+        });
       }
     }
 
-    await saveProviderRecord({
-      providerId,
-      apiKey,
-      keepExistingApiKey: !apiKey.trim(),
-      baseUrl: baseUrl || null,
-      models: models.length > 0 ? models : undefined,
+    await saveRoutePolicy({
+      id: "generate:*",
+      name: "Default Generate Route",
+      scene: "generate",
+      productType: "*",
+      enabled: true,
+      primaryConnectionId: activeModel,
     });
 
-    const modelCount = models.length || providerDef?.models.length || 0;
     revalidatePath("/admin");
     revalidatePath("/admin/settings");
     revalidatePath("/admin/install");
     return {
       ok: true,
-      message: `${label} 配置已保存（${modelCount} 个模型）。`,
+      message: `${providerId} 配置已保存，并同步默认路由。`,
     };
   }
 

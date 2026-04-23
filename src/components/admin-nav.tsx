@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Eye,
+  FileStack,
   ImageIcon,
   LayoutDashboard,
   LogOut,
@@ -17,13 +18,13 @@ const items = [
   {
     href: "/admin",
     label: "总览看板",
-    description: "统计、趋势、最近活动",
+    description: "统计、趋势与最近活动",
     icon: LayoutDashboard,
   },
   {
     href: "/admin/generations",
     label: "生成记录",
-    description: "效果图、原图、订单映射",
+    description: "效果图、原图与订单映射",
     icon: ImageIcon,
   },
   {
@@ -35,14 +36,20 @@ const items = [
   {
     href: "/admin/settings",
     label: "模型与存储",
-    description: "S3、API Key、Webhook",
+    description: "S3、API Key 与接口配置",
     icon: PlugZap,
   },
   {
     href: "/admin/preview",
     label: "功能预览",
-    description: "店铺按钮、生成流程、测试展示",
+    description: "前台按钮、生成流程与测试展示",
     icon: Eye,
+  },
+  {
+    href: "/admin/blueprint",
+    label: "界面蓝图",
+    description: "升级模板与统一后台骨架",
+    icon: FileStack,
   },
   {
     href: "/admin/install",

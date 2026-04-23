@@ -1,6 +1,8 @@
 import { slugifyProductType } from "@/lib/utils";
 import {
   createPromptVersion,
+  deleteConnection,
+  deletePromptTemplate,
   exposeSecret,
   getConnectionById,
   getEffectiveRoute,
@@ -60,8 +62,16 @@ export async function saveConnection(input: Partial<ConnectionRecord> & { secret
   return exposeSecret(next);
 }
 
+export async function removeConnection(id: string) {
+  await deleteConnection(id);
+}
+
 export async function saveRoutePolicy(input: Partial<RoutePolicyRecord>) {
-  return upsertRoutePolicy(input);
+  const route = await upsertRoutePolicy(input);
+  const settings = await getEffectiveSystemSetting();
+  const primaryConnection = await getConnectionById(route.primaryConnectionId);
+  await syncSystemSettingToBucket(settings, route, primaryConnection?.modelCode ?? null);
+  return route;
 }
 
 export async function savePromptTemplateWithVersion(input: {
@@ -76,12 +86,15 @@ export async function savePromptTemplateWithVersion(input: {
   routePolicyId?: string | null;
   publish?: boolean;
 }) {
+  const currentTemplate = input.templateId
+    ? (await listPromptTemplates()).find((item) => item.id === input.templateId)
+    : null;
   const template = await upsertPromptTemplate({
     id: input.templateId,
     name: input.name,
     productType: slugifyProductType(input.productType || "frame"),
     scene: input.scene || "generate",
-    status: input.publish ? "published" : "draft",
+    status: input.publish ? "published" : currentTemplate?.status,
   });
 
   const version = await createPromptVersion({
@@ -168,6 +181,10 @@ export async function getPromptEditorModel(templateId?: string) {
   };
 }
 
+export async function removePromptTemplate(id: string) {
+  await deletePromptTemplate(id);
+}
+
 export async function testConnection(id: string) {
   const record = await getConnectionById(id);
   if (!record) {
@@ -175,6 +192,7 @@ export async function testConnection(id: string) {
   }
 
   const secret = exposeSecret(record).secret as string | null;
+  const hasLegacySecret = record.metadata?.hasLegacySecret === true;
   const resolvedEndpoint =
     record.providerKind === "openai_official"
       ? "https://api.openai.com/v1"
@@ -182,12 +200,12 @@ export async function testConnection(id: string) {
 
   const ok = Boolean(
     record.providerKind === "openai_official"
-      ? secret
+      ? secret || hasLegacySecret
       : record.providerKind === "openai_compatible"
-        ? secret && record.baseUrl
+        ? (secret || hasLegacySecret) && record.baseUrl
         : record.providerKind.startsWith("custom_webhook")
           ? record.submitUrl
-          : secret || record.submitUrl || record.baseUrl,
+          : secret || hasLegacySecret || record.submitUrl || record.baseUrl,
   );
 
   return {
@@ -239,4 +257,3 @@ export async function getUiBlueprintSchema() {
     ],
   };
 }
-
