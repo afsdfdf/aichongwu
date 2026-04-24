@@ -388,6 +388,21 @@ export async function GET() {
     statusSub.textContent = "Review your design, then use it to unlock color selection";
   }
 
+  async function readJsonResponse(response) {
+    const text = await response.text();
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error("API returned invalid JSON.");
+      }
+    }
+
+    const preview = text.replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 160);
+    throw new Error("API returned " + response.status + " " + response.statusText + (preview ? ": " + preview : ""));
+  }
+
 
   async function generateFromFile(file) {
     stepUpload.style.display = "none";
@@ -405,7 +420,7 @@ export async function GET() {
 
     startFakeProgress();
     const response = await fetch(apiBase + "/api/generate", { method: "POST", body: payload });
-    const data = await response.json();
+    const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.message || "Generation failed");
 
     uploadProgressFill.style.width = "100%";
@@ -480,7 +495,7 @@ export async function GET() {
           shopDomain: config.shopDomain,
         }),
       });
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.message || "Failed to confirm design");
 
       upsertHiddenInput("properties[_AI Design Confirmed]", "yes");
