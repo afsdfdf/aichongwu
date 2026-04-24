@@ -581,6 +581,115 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   const isOpenAICompatibleChatApi =
     endpointUrl.includes("/v1/chat/completions") || endpointUrl.includes("/chat/completions");
 
+  function chatCompletionsEndpointFromImagesEndpoint() {
+    if (endpointUrl.includes("/v1/images/generations")) {
+      return endpointUrl.replace(/\/v1\/images\/generations.*$/i, "/v1/chat/completions");
+    }
+    if (endpointUrl.includes("/images/generations")) {
+      return endpointUrl.replace(/\/images\/generations.*$/i, "/chat/completions");
+    }
+    return null;
+  }
+
+  async function requestChatCompletionsImage(params: {
+    endpoint: string;
+    sourceMode: "base64" | "url";
+    fallbackFromImagesEndpoint?: boolean;
+  }) {
+    const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: input.prompt }];
+
+    if (params.sourceMode === "base64" && sourceProvided) {
+      messageContent.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${input.sourceImageContentType};base64,${sourceImageBase64(input)}`,
+        },
+      });
+    } else if (input.sourceImageUrl) {
+      messageContent.push({
+        type: "image_url",
+        image_url: {
+          url: input.sourceImageUrl,
+        },
+      });
+    }
+
+    const response = await fetch(params.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [{ role: "user", content: messageContent.length === 1 ? input.prompt : messageContent }],
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      const error = new Error(text || `Custom API chat request failed: ${response.status}`);
+      Object.assign(error, { status: response.status });
+      throw error;
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; image_url?: { url?: string }; text?: string }>;
+        };
+      }>;
+    };
+
+    const content = payload.choices?.[0]?.message?.content;
+    if (Array.isArray(content)) {
+      const imageItem = content.find((item) => item?.type === "image_url" && item?.image_url?.url);
+      if (imageItem?.image_url?.url) {
+        return normalizeRemoteImage({
+          imageUrl: imageItem.image_url.url,
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: Boolean(messageContent.length > 1),
+            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+          },
+        });
+      }
+    }
+
+    if (typeof content === "string") {
+      const base64Match = content.match(
+        /!\[.*?\]\(data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)\)/,
+      ) || content.match(/^data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)$/);
+      if (base64Match) {
+        const [, contentType, base64Data] = base64Match;
+        return {
+          outputBuffer: Buffer.from(base64Data, "base64"),
+          contentType,
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: Boolean(messageContent.length > 1),
+            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+          },
+        };
+      }
+
+      const urlMatch = content.match(/https?:\/\/\S+/);
+      if (urlMatch?.[0]) {
+        return normalizeRemoteImage({
+          imageUrl: urlMatch[0],
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: Boolean(messageContent.length > 1),
+            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+          },
+        });
+      }
+    }
+
+    throw new Error("Chat completions response did not contain a recognizable image.");
+  }
+
   if (!sourceProvided && isOpenAICompatibleEditsApi) {
     const error = new Error("The configured endpoint uses /images/edits and requires a source image.");
     Object.assign(error, { status: 400 });
@@ -677,95 +786,25 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       : input.prompt;
 
   if (isOpenAICompatibleChatApi) {
-    const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: input.prompt }];
+    return requestChatCompletionsImage({ endpoint: endpointUrl, sourceMode: "base64" });
+  }
 
-    if (sourceProvided) {
-      messageContent.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${input.sourceImageContentType};base64,${sourceImageBase64(input)}`,
-        },
-      });
-    } else if (input.sourceImageUrl) {
-      messageContent.push({
-        type: "image_url",
-        image_url: {
-          url: input.sourceImageUrl,
-        },
-      });
-    }
-
-    const response = await fetch(endpointUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [{ role: "user", content: messageContent.length === 1 ? input.prompt : messageContent }],
-        max_tokens: 1024,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      const error = new Error(text || `Custom API chat request failed: ${response.status}`);
-      Object.assign(error, { status: response.status });
-      throw error;
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string | Array<{ type?: string; image_url?: { url?: string }; text?: string }>;
-        };
-      }>;
-    };
-
-    const content = payload.choices?.[0]?.message?.content;
-    if (Array.isArray(content)) {
-      const imageItem = content.find((item) => item?.type === "image_url" && item?.image_url?.url);
-      if (imageItem?.image_url?.url) {
-        return normalizeRemoteImage({
-          imageUrl: imageItem.image_url.url,
-          metadata: {
-            provider: "custom-openai-compatible-chat",
-            sourceImageForwarded: sourceProvided,
-          },
+  if (sourceProvided && input.sourceImageUrl && isOpenAICompatibleImagesApi) {
+    const chatEndpoint = chatCompletionsEndpointFromImagesEndpoint();
+    if (chatEndpoint) {
+      try {
+        return await requestChatCompletionsImage({
+          endpoint: chatEndpoint,
+          sourceMode: "url",
+          fallbackFromImagesEndpoint: true,
         });
+      } catch (error) {
+        console.warn(
+          "[custom-images-fallback] chat image_url fallback failed, using prompt URL fallback:",
+          error instanceof Error ? error.message : error,
+        );
       }
     }
-
-    if (typeof content === "string") {
-      const base64Match = content.match(
-        /!\[.*?\]\(data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)\)/,
-      ) || content.match(/^data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)$/);
-      if (base64Match) {
-        const [, contentType, base64Data] = base64Match;
-        return {
-          outputBuffer: Buffer.from(base64Data, "base64"),
-          contentType,
-          metadata: {
-            provider: "custom-openai-compatible-chat",
-            sourceImageForwarded: sourceProvided,
-          },
-        };
-      }
-
-      const urlMatch = content.match(/https?:\/\/\S+/);
-      if (urlMatch?.[0]) {
-        return normalizeRemoteImage({
-          imageUrl: urlMatch[0],
-          metadata: {
-            provider: "custom-openai-compatible-chat",
-            sourceImageForwarded: sourceProvided,
-          },
-        });
-      }
-    }
-
-    throw new Error("Chat completions response did not contain a recognizable image.");
   }
 
   const requestBody = isOpenAICompatibleImagesApi
