@@ -6,6 +6,7 @@ import {
   RecentActivityPanel,
   TrendPanel,
 } from "@/components/dashboard";
+import { AdminUpload } from "@/components/admin-upload";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { StickyActionBar } from "@/components/admin/StickyActionBar";
 import { getDashboardData } from "@/lib/dashboard";
@@ -53,6 +54,8 @@ export default async function AdminDashboardPage() {
       <KpiGrid summary={dashboard.summary} promptCount={prompts.length} />
 
       <TrendPanel summary={dashboard.summary} trend={dashboard.trend} />
+
+      <AdminUpload />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <RecentActivityPanel

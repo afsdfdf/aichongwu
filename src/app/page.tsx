@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { HomepageUpload } from "@/components/homepage-upload";
 import {
   ArrowRight,
   BarChart3,
@@ -102,8 +101,6 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-
-            <HomepageUpload />
           </div>
 
           <div className="glass relative overflow-hidden rounded-[32px] p-7 shadow-2xl shadow-sky-950/30">

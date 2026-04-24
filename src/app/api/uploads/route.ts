@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/auth";
 import { uploadBufferToS3 } from "@/lib/s3";
 
 export const runtime = "nodejs";
@@ -8,6 +9,10 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
+    if (!(await getAdminSession())) {
+      return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -25,7 +30,7 @@ export async function POST(request: Request) {
 
     const uploaded = await uploadBufferToS3({
       buffer: Buffer.from(await file.arrayBuffer()),
-      folder: "homepage-uploads",
+      folder: "admin-uploads",
       contentType: file.type || "application/octet-stream",
     });
 
