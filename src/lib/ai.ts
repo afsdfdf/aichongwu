@@ -591,6 +591,104 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     return null;
   }
 
+  function editsEndpointFromImagesEndpoint() {
+    if (endpointUrl.includes("/v1/images/generations")) {
+      return endpointUrl.replace(/\/v1\/images\/generations.*$/i, "/v1/images/edits");
+    }
+    if (endpointUrl.includes("/images/generations")) {
+      return endpointUrl.replace(/\/images\/generations.*$/i, "/images/edits");
+    }
+    return null;
+  }
+
+  async function requestImagesEdit(editEndpoint: string, fallbackFromImagesEndpoint = false) {
+    const formData = new FormData();
+    formData.append("model", modelName);
+    formData.append("prompt", input.prompt);
+    formData.append("size", size);
+    formData.append("n", "1");
+    formData.append(
+      "image",
+      new File([new Uint8Array(input.sourceImageBuffer!)], "source.png", {
+        type: input.sourceImageContentType!,
+      }),
+    );
+
+    const response = await fetch(editEndpoint, {
+      method: "POST",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      const error = new Error(text || `Custom API edit request failed: ${response.status}`);
+      Object.assign(error, { status: response.status });
+      throw error;
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
+      imageUrl?: string;
+      imageBase64?: string;
+      mimeType?: string;
+      metadata?: Record<string, unknown>;
+    };
+
+    const openAIStyleImage = payload.data?.[0];
+    if (openAIStyleImage?.b64_json) {
+      return {
+        outputBuffer: Buffer.from(openAIStyleImage.b64_json, "base64"),
+        contentType: "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+          sourceImageFallback: fallbackFromImagesEndpoint ? "images-edits" : null,
+        },
+      };
+    }
+
+    if (openAIStyleImage?.url) {
+      return normalizeRemoteImage({
+        imageUrl: openAIStyleImage.url,
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+          sourceImageFallback: fallbackFromImagesEndpoint ? "images-edits" : null,
+        },
+      });
+    }
+
+    if (payload.imageBase64) {
+      return {
+        outputBuffer: Buffer.from(payload.imageBase64, "base64"),
+        contentType: payload.mimeType || "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          provider: "custom-openai-compatible-edit",
+          sourceImageForwarded: true,
+          sourceImageFallback: fallbackFromImagesEndpoint ? "images-edits" : null,
+        },
+      };
+    }
+
+    return normalizeRemoteImage({
+      imageUrl: payload.imageUrl,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        provider: "custom-openai-compatible-edit",
+        sourceImageForwarded: true,
+        sourceImageFallback: fallbackFromImagesEndpoint ? "images-edits" : null,
+      },
+    });
+  }
+
   async function requestChatCompletionsImage(params: {
     endpoint: string;
     sourceMode: "base64" | "url";
@@ -697,87 +795,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   }
 
   if (sourceProvided && isOpenAICompatibleEditsApi) {
-    const formData = new FormData();
-    formData.append("model", modelName);
-    formData.append("prompt", input.prompt);
-    formData.append("size", size);
-    formData.append("n", "1");
-    formData.append(
-      "image",
-      new File([new Uint8Array(input.sourceImageBuffer!)], "source.png", {
-        type: input.sourceImageContentType!,
-      }),
-    );
-
-    const response = await fetch(endpointUrl, {
-      method: "POST",
-      headers: {
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      const error = new Error(text || `Custom API edit request failed: ${response.status}`);
-      Object.assign(error, { status: response.status });
-      throw error;
-    }
-
-    const payload = (await response.json()) as {
-      data?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
-      imageUrl?: string;
-      imageBase64?: string;
-      mimeType?: string;
-      metadata?: Record<string, unknown>;
-    };
-
-    const openAIStyleImage = payload.data?.[0];
-    if (openAIStyleImage?.b64_json) {
-      return {
-        outputBuffer: Buffer.from(openAIStyleImage.b64_json, "base64"),
-        contentType: "image/png",
-        metadata: {
-          ...(payload.metadata ?? {}),
-          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
-          provider: "custom-openai-compatible-edit",
-          sourceImageForwarded: true,
-        },
-      };
-    }
-
-    if (openAIStyleImage?.url) {
-      return normalizeRemoteImage({
-        imageUrl: openAIStyleImage.url,
-        metadata: {
-          ...(payload.metadata ?? {}),
-          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
-          provider: "custom-openai-compatible-edit",
-          sourceImageForwarded: true,
-        },
-      });
-    }
-
-    if (payload.imageBase64) {
-      return {
-        outputBuffer: Buffer.from(payload.imageBase64, "base64"),
-        contentType: payload.mimeType || "image/png",
-        metadata: {
-          ...(payload.metadata ?? {}),
-          provider: "custom-openai-compatible-edit",
-          sourceImageForwarded: true,
-        },
-      };
-    }
-
-    return normalizeRemoteImage({
-      imageUrl: payload.imageUrl,
-      metadata: {
-        ...(payload.metadata ?? {}),
-        provider: "custom-openai-compatible-edit",
-        sourceImageForwarded: true,
-      },
-    });
+    return requestImagesEdit(endpointUrl);
   }
 
   const promptWithSourceUrl =
@@ -790,6 +808,18 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   }
 
   if (sourceProvided && input.sourceImageUrl && isOpenAICompatibleImagesApi) {
+    const editsEndpoint = editsEndpointFromImagesEndpoint();
+    if (editsEndpoint) {
+      try {
+        return await requestImagesEdit(editsEndpoint, true);
+      } catch (error) {
+        console.warn(
+          "[custom-images-fallback] edits fallback failed, trying chat image_url fallback:",
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
     const chatEndpoint = chatCompletionsEndpointFromImagesEndpoint();
     if (chatEndpoint) {
       try {
