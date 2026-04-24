@@ -671,11 +671,10 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     });
   }
 
-  if (sourceProvided && isOpenAICompatibleImagesApi) {
-    throw new Error(
-      "The configured endpoint uses /images/generations, which is text-to-image only. Your uploaded image is not sent to that upstream API. Use an /images/edits endpoint or a custom JSON endpoint that accepts sourceImageUrl/sourceImageBase64.",
-    );
-  }
+  const promptWithSourceUrl =
+    sourceProvided && input.sourceImageUrl
+      ? `${input.prompt}\n\nUse this uploaded customer image as the visual reference: ${input.sourceImageUrl}`
+      : input.prompt;
 
   if (isOpenAICompatibleChatApi) {
     const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: input.prompt }];
@@ -772,7 +771,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   const requestBody = isOpenAICompatibleImagesApi
     ? {
         model: modelName,
-        prompt: input.prompt,
+        prompt: promptWithSourceUrl,
         n: 1,
         size,
       }
@@ -824,7 +823,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
-        sourceImageForwarded: false,
+        sourceImageForwarded: Boolean(sourceProvided && input.sourceImageUrl),
+        sourceImageFallback: sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
       },
     };
   }
@@ -836,7 +836,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
-        sourceImageForwarded: false,
+        sourceImageForwarded: Boolean(sourceProvided && input.sourceImageUrl),
+        sourceImageFallback: sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
       },
     });
   }
@@ -847,7 +848,11 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       contentType: payload.mimeType || "image/png",
       metadata: {
         ...(payload.metadata ?? {}),
-        sourceImageForwarded: sourceProvided,
+        provider: "custom-openai-compatible",
+        sourceImageForwarded: isOpenAICompatibleImagesApi
+          ? Boolean(sourceProvided && input.sourceImageUrl)
+          : sourceProvided,
+        sourceImageFallback: isOpenAICompatibleImagesApi && sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
       },
     };
   }
@@ -856,7 +861,11 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     imageUrl: payload.imageUrl,
     metadata: {
       ...(payload.metadata ?? {}),
-      sourceImageForwarded: sourceProvided,
+      provider: "custom-openai-compatible",
+      sourceImageForwarded: isOpenAICompatibleImagesApi
+        ? Boolean(sourceProvided && input.sourceImageUrl)
+        : sourceProvided,
+      sourceImageFallback: isOpenAICompatibleImagesApi && sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
     },
   });
 }
