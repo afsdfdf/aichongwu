@@ -68,18 +68,27 @@ export async function saveStoreSettingAction(
 
   const { setting } = await getStoreContext(getDefaultShopDomain());
 
-  const providerId = String(formData.get("providerId") || setting.modelProvider || "google").trim() as "google" | "custom";
+  const providerId = (
+    String(formData.get("providerId") || setting.modelProvider || "google").trim() === "google" ? "google" : "custom"
+  ) as "google" | "custom";
   const activeModel = String(formData.get("activeModel") || setting.activeModel || "gemini-3.1-flash-image").trim();
   const modelName = String(formData.get("modelName") || "").trim() || activeModel;
   const apiKey = String(formData.get("apiKey") || "");
   const baseUrl =
     String(formData.get("baseUrl") || "").trim() ||
-    (providerId === "google" ? "https://generativelanguage.googleapis.com" : "");
-  const modelEndpoint =
+    (providerId === "google" ? "https://generativelanguage.googleapis.com" : "https://ai403.eu.cc/v1");
+  const rawEndpoint =
     providerId === "google"
       ? `/v1beta/models/${modelName}:generateContent`
-      : String(formData.get("modelEndpoint") || "").trim();
-  const modelAdapter = providerId === "google" ? "gemini" : "custom";
+      : String(formData.get("modelEndpoint") || "").trim() || "/images/edits";
+  const modelEndpoint =
+    providerId === "custom" && /\/v1$/i.test(baseUrl) && /^\/v1\//i.test(rawEndpoint)
+      ? rawEndpoint.replace(/^\/v1/i, "")
+      : rawEndpoint;
+  const modelAdapter =
+    providerId === "google"
+      ? "gemini"
+      : "custom";
   const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
   const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "Upload Your Pet Photo");
 

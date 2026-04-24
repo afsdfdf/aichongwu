@@ -15,34 +15,43 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="模型与存储设置"
-        description={`Single configuration mode for ${shopDomain}. S3 stores one active model configuration and overrides the previous one on save.`}
+        title="Model Settings"
+        description={`Keep one Google route and one GPT / Compatible route for ${shopDomain}. Save updates the active configuration.`}
         actions={
-          <>
-            <Link
-              href="/admin/install"
-              className="inline-flex min-h-10 items-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              安装指引
-            </Link>
-          </>
+          <Link
+            href="/admin/install"
+            className="inline-flex min-h-10 items-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Install Guide
+          </Link>
         }
       />
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <FormCard title="当前 Provider" description="Only one provider can be active at a time.">
-          <p className="break-all text-lg font-semibold text-slate-900">{setting.modelProvider}</p>
-          <p className="text-sm leading-6 text-slate-500">{setting.modelApiKeyEncrypted ? "API key is saved." : "No API key saved yet."}</p>
+        <FormCard title="Current Route" description="Only the active route is used at runtime.">
+          <p className="break-all text-lg font-semibold text-slate-900">
+            {setting.modelProvider === "google" ? "Google" : "GPT / Compatible"}
+          </p>
+          <p className="text-sm leading-6 text-slate-500">
+            {setting.modelApiKeyEncrypted ? "API key is saved." : "No API key saved yet."}
+          </p>
         </FormCard>
 
-        <FormCard title="当前模型" description="Runtime always uses this single model configuration.">
+        <FormCard title="Current Model" description="Runtime always uses this single model configuration.">
           <p className="text-3xl font-semibold text-slate-900">{setting.activeModel}</p>
           <p className="text-sm leading-6 text-slate-500">{setting.modelName || setting.activeModel}</p>
         </FormCard>
 
-        <FormCard title="当前端点" description="Google uses official SDK. Custom uses your saved endpoint.">
-          <p className="break-all text-sm font-medium text-slate-900">{setting.modelProvider === "google" ? setting.modelBaseUrl : setting.modelEndpoint || setting.modelBaseUrl || "-"}</p>
-          <p className="text-sm leading-6 text-slate-500">Saving a new configuration overwrites the previous one.</p>
+        <FormCard
+          title="Current Endpoint"
+          description="Google uses the official SDK. GPT / Compatible uses raw HTTP with your saved endpoint."
+        >
+          <p className="break-all text-sm font-medium text-slate-900">
+            {setting.modelProvider === "google"
+              ? setting.modelBaseUrl
+              : setting.modelEndpoint || setting.modelBaseUrl || "-"}
+          </p>
+          <p className="text-sm leading-6 text-slate-500">Saving a route updates the active configuration.</p>
         </FormCard>
       </div>
 
@@ -58,12 +67,14 @@ export default async function SettingsPage() {
       />
 
       <StickyActionBar>
-        <span className="mr-auto text-sm text-slate-500">The backend now reads a single active model configuration from S3.</span>
+        <span className="mr-auto text-sm text-slate-500">
+          Keep the UI simple. Use Google for the official SDK route, or GPT / Compatible for raw HTTP compatible gateways.
+        </span>
         <Link
           href="/admin/prompts"
           className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          提示词页
+          Prompts
         </Link>
       </StickyActionBar>
     </div>

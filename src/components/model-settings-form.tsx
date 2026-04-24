@@ -6,9 +6,11 @@ import { saveStoreSettingAction } from "@/app/admin/(protected)/actions";
 
 const initialState = { ok: false, message: "" };
 
+type ProviderMode = "google" | "custom";
+
 type Props = {
   activeModel: string;
-  modelProvider: "google" | "custom";
+  modelProvider: "google" | "openai" | "custom";
   modelName: string | null;
   modelBaseUrl: string | null;
   modelEndpoint: string | null;
@@ -27,8 +29,9 @@ export function ModelSettingsForm({
   widgetAccentColor,
   widgetButtonText,
 }: Props) {
+  const normalizedProvider: ProviderMode = modelProvider === "google" ? "google" : "custom";
   const [state, formAction, pending] = useActionState(saveStoreSettingAction, initialState);
-  const [providerId, setProviderId] = useState<"google" | "custom">(modelProvider || "google");
+  const [providerId, setProviderId] = useState<ProviderMode>(normalizedProvider);
   const [sourceImage, setSourceImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("Use the uploaded image as the subject and generate a clean premium preview.");
   const [testing, setTesting] = useState(false);
@@ -36,27 +39,30 @@ export function ModelSettingsForm({
   const [testImageUrl, setTestImageUrl] = useState<string | null>(null);
 
   const defaults = useMemo(() => {
+    const useSavedValues = normalizedProvider === providerId;
+
     if (providerId === "google") {
       return {
-        activeModel: activeModel || "gemini-3.1-flash-image",
-        modelName: modelName || "gemini-3.1-flash-image-preview",
+        activeModel: useSavedValues ? activeModel || "gemini-3.1-flash-image" : "gemini-3.1-flash-image",
+        modelName: useSavedValues ? modelName || "gemini-3.1-flash-image-preview" : "gemini-3.1-flash-image-preview",
         modelBaseUrl: "https://generativelanguage.googleapis.com",
         modelEndpoint: "",
       };
     }
 
     return {
-      activeModel: activeModel || "custom-model",
-      modelName: modelName || activeModel || "custom-model",
-      modelBaseUrl: modelBaseUrl || "",
-      modelEndpoint: modelEndpoint || "",
+      activeModel: useSavedValues ? activeModel || "gpt-image-2" : "gpt-image-2",
+      modelName: useSavedValues ? modelName || activeModel || "gpt-image-2" : "gpt-image-2",
+      modelBaseUrl: useSavedValues ? modelBaseUrl || "https://ai403.eu.cc/v1" : "https://ai403.eu.cc/v1",
+      modelEndpoint: useSavedValues ? modelEndpoint || "/images/edits" : "/images/edits",
     };
-  }, [activeModel, modelBaseUrl, modelEndpoint, modelName, providerId]);
+  }, [activeModel, modelBaseUrl, modelEndpoint, modelName, normalizedProvider, providerId]);
 
   async function runTest() {
     setTesting(true);
     setTestMessage("");
     setTestImageUrl(null);
+
     try {
       const response = await fetch("/api/providers/test-image", {
         method: "POST",
@@ -67,14 +73,23 @@ export function ModelSettingsForm({
           sourceImage: sourceImage || undefined,
         }),
       });
-      const data = (await response.json()) as {
-        ok?: boolean;
-        message?: string;
-        outputImageUrl?: string;
-      };
 
-      if (!data.ok) {
-        setTestMessage(data.message || "Test failed.");
+      const raw = await response.text();
+      let data: { ok?: boolean; message?: string; outputImageUrl?: string } | null = null;
+
+      try {
+        data = raw ? (JSON.parse(raw) as { ok?: boolean; message?: string; outputImageUrl?: string }) : null;
+      } catch {
+        setTestMessage(
+          raw.trimStart().startsWith("<")
+            ? `Server returned an HTML error page (${response.status}).`
+            : raw || `Test failed with status ${response.status}.`,
+        );
+        return;
+      }
+
+      if (!data?.ok) {
+        setTestMessage(data?.message || `Test failed with status ${response.status}.`);
         return;
       }
 
@@ -87,6 +102,12 @@ export function ModelSettingsForm({
     }
   }
 
+  const modeTitle = providerId === "google" ? "Google" : "GPT / Compatible";
+  const modeDescription =
+    providerId === "google"
+      ? "Google uses the official SDK. Save one Google configuration and it becomes active."
+      : "GPT / Compatible uses raw HTTP for OpenAI-compatible gateways. Save one configuration and it becomes active.";
+
   return (
     <div className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -96,14 +117,14 @@ export function ModelSettingsForm({
             onClick={() => setProviderId("google")}
             className={`rounded-full px-4 py-2 text-sm font-semibold ${providerId === "google" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}
           >
-            Google AI
+            Google
           </button>
           <button
             type="button"
             onClick={() => setProviderId("custom")}
             className={`rounded-full px-4 py-2 text-sm font-semibold ${providerId === "custom" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}
           >
-            自定义 API
+            GPT / Compatible
           </button>
         </div>
 
@@ -115,12 +136,8 @@ export function ModelSettingsForm({
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Current Mode</p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-900">{providerId === "google" ? "Google SDK" : "Custom Endpoint"}</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {providerId === "google"
-                  ? "Use the official Google SDK. Only API key and model ID are required."
-                  : "Save a single custom endpoint + key + model ID. Saving again overwrites the previous configuration."}
-              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-900">{modeTitle}</h3>
+              <p className="mt-1 text-sm text-slate-500">{modeDescription}</p>
             </div>
 
             <label className="block">
@@ -161,13 +178,13 @@ export function ModelSettingsForm({
               />
             </label>
 
-            {providerId === "custom" ? (
+            {providerId !== "google" ? (
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">Endpoint Path or Full URL</span>
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Endpoint Path</span>
                 <input
                   name="modelEndpoint"
                   defaultValue={defaults.modelEndpoint}
-                  placeholder="/v1/chat/completions or https://example.com/v1/chat/completions"
+                  placeholder="/images/edits, /images/generations, or /chat/completions"
                   className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-0"
                 />
               </label>
@@ -180,7 +197,7 @@ export function ModelSettingsForm({
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
                 <Save className="size-4" />
-                {pending ? "Saving..." : "保存配置"}
+                {pending ? "Saving..." : "Save"}
               </button>
               <p className={`text-sm ${state.ok ? "text-emerald-600" : "text-slate-500"}`}>{state.message}</p>
             </div>
@@ -190,7 +207,7 @@ export function ModelSettingsForm({
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Test Workspace</p>
               <h3 className="mt-2 text-xl font-semibold text-slate-900">Quick Validation</h3>
-              <p className="mt-1 text-sm text-slate-500">This always tests the single active configuration.</p>
+              <p className="mt-1 text-sm text-slate-500">Tests always use the single active configuration shown above.</p>
             </div>
 
             <label className="block">
@@ -230,7 +247,7 @@ export function ModelSettingsForm({
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
                 <Sparkles className="size-4" />
-                {testing ? "Testing..." : "运行测试"}
+                {testing ? "Testing..." : "Run Test"}
               </button>
               {sourceImage ? (
                 <button
@@ -239,7 +256,7 @@ export function ModelSettingsForm({
                   className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700"
                 >
                   <X className="size-4" />
-                  清空图片
+                  Clear Image
                 </button>
               ) : (
                 <span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 text-sm text-slate-500">

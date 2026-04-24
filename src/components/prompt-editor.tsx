@@ -232,9 +232,22 @@ function PromptTester({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { ok?: boolean; message?: string; outputImageUrl?: string };
-      if (data.ok && data.outputImageUrl) setResultUrl(data.outputImageUrl);
-      else setError(data.message || "生成失败");
+      const raw = await res.text();
+      let data: { ok?: boolean; message?: string; outputImageUrl?: string } | null = null;
+
+      try {
+        data = raw ? (JSON.parse(raw) as { ok?: boolean; message?: string; outputImageUrl?: string }) : null;
+      } catch {
+        setError(
+          raw.trimStart().startsWith("<")
+            ? `Server returned an HTML error page (${res.status}).`
+            : raw || `Request failed with status ${res.status}.`,
+        );
+        return;
+      }
+
+      if (data?.ok && data.outputImageUrl) setResultUrl(data.outputImageUrl);
+      else setError(data?.message || `Request failed with status ${res.status}.`);
     } catch {
       setError("请求失败");
     }

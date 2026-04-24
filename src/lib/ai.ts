@@ -2,7 +2,7 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { getModelOption, type ModelAdapter } from "@/lib/catalog";
 import { fetchRemoteFileAsBuffer, uploadBufferToS3 } from "@/lib/s3";
-import { getProviderConfigByKey, getProviderConfigs } from "@/lib/store";
+import { getProviderConfigByKey } from "@/lib/store";
 
 type GenerateInput = {
   modelKey: string;
@@ -40,23 +40,40 @@ function ensureImageAwareAdapter(adapter: ModelAdapter, label: string, input: Ge
 
 async function resolveProvider(modelKey: string) {
   const option = getModelOption(modelKey);
-  if (!option) {
+  const provider = await getProviderConfigByKey(modelKey);
+  if (!option && !provider) {
     throw new Error(`Unknown model: ${modelKey}`);
   }
 
-  const provider = await getProviderConfigByKey(modelKey);
+  const fallbackAdapter = (provider?.adapter as ModelAdapter | undefined) || "custom";
+  const resolvedOption =
+    option ||
+    {
+      key: modelKey,
+      formKey: modelKey,
+      label: provider?.label || modelKey,
+      description: "Runtime model loaded from the active saved configuration.",
+      adapter: fallbackAdapter,
+      provider: provider?.providerId || "Custom",
+      modelName: provider?.modelName || modelKey,
+      defaultEndpoint: provider?.webhookUrl || "",
+      docsHint: "",
+      supportsImageTest: true,
+      supportsPreviewGeneration: true,
+    };
+
   // v3 returns fullEndpoint (base + path combined), prefer it over webhookUrl
   const endpointUrl = (provider as Record<string, unknown> | null)?.fullEndpoint as string | undefined
     || provider?.webhookUrl
-    || option.defaultEndpoint
+    || resolvedOption.defaultEndpoint
     || "";
   return {
-    option,
+    option: resolvedOption,
     provider,
     endpointUrl,
     apiKey: provider?.apiKey || null,
     baseUrl: provider?.baseUrl || undefined,
-    modelName: provider?.modelName || option.modelName,
+    modelName: provider?.modelName || resolvedOption.modelName,
   };
 }
 
@@ -554,6 +571,14 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     endpointUrl.includes("/v1/images/edits") || endpointUrl.includes("/images/edits");
   const isOpenAICompatibleImagesApi =
     endpointUrl.includes("/v1/images/generations") || endpointUrl.includes("/images/generations");
+  const isOpenAICompatibleChatApi =
+    endpointUrl.includes("/v1/chat/completions") || endpointUrl.includes("/chat/completions");
+
+  if (!sourceProvided && isOpenAICompatibleEditsApi) {
+    const error = new Error("The configured endpoint uses /images/edits and requires a source image.");
+    Object.assign(error, { status: 400 });
+    throw error;
+  }
 
   if (sourceProvided && isOpenAICompatibleEditsApi) {
     const formData = new FormData();
@@ -577,7 +602,10 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     });
 
     if (!response.ok) {
-      throw new Error(`Custom API edit request failed: ${response.status}`);
+      const text = await response.text().catch(() => "");
+      const error = new Error(text || `Custom API edit request failed: ${response.status}`);
+      Object.assign(error, { status: response.status });
+      throw error;
     }
 
     const payload = (await response.json()) as {
@@ -642,6 +670,83 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     );
   }
 
+  if (isOpenAICompatibleChatApi) {
+    const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: input.prompt }];
+
+    if (sourceProvided) {
+      messageContent.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${input.sourceImageContentType};base64,${sourceImageBase64(input)}`,
+        },
+      });
+    } else if (input.sourceImageUrl) {
+      messageContent.push({
+        type: "image_url",
+        image_url: {
+          url: input.sourceImageUrl,
+        },
+      });
+    }
+
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [{ role: "user", content: messageContent }],
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      const error = new Error(text || `Custom API chat request failed: ${response.status}`);
+      Object.assign(error, { status: response.status });
+      throw error;
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; image_url?: { url?: string }; text?: string }>;
+        };
+      }>;
+    };
+
+    const content = payload.choices?.[0]?.message?.content;
+    if (Array.isArray(content)) {
+      const imageItem = content.find((item) => item?.type === "image_url" && item?.image_url?.url);
+      if (imageItem?.image_url?.url) {
+        return normalizeRemoteImage({
+          imageUrl: imageItem.image_url.url,
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: sourceProvided,
+          },
+        });
+      }
+    }
+
+    if (typeof content === "string") {
+      const urlMatch = content.match(/https?:\/\/\S+/);
+      if (urlMatch?.[0]) {
+        return normalizeRemoteImage({
+          imageUrl: urlMatch[0],
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: sourceProvided,
+          },
+        });
+      }
+    }
+
+    throw new Error("Chat completions response did not contain an image URL.");
+  }
+
   const requestBody = isOpenAICompatibleImagesApi
     ? {
         model: modelName,
@@ -669,7 +774,10 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   });
 
   if (!response.ok) {
-    throw new Error(`Custom API request failed: ${response.status}`);
+    const text = await response.text().catch(() => "");
+    const error = new Error(text || `Custom API request failed: ${response.status}`);
+    Object.assign(error, { status: response.status });
+    throw error;
   }
 
   const payload = (await response.json()) as {
@@ -733,7 +841,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
 
 function ensureConfigured(value: string | null | undefined, label: string) {
   if (!value) {
-    throw new Error(`${label} 未配置`);
+    throw new Error(`${label} is not configured`);
   }
   return value;
 }
@@ -764,66 +872,28 @@ async function runProviderImageGeneration(input: GenerateInput) {
         baseUrl,
       );
     case "stability":
-      return generateWithStability(input, ensureConfigured(endpointUrl, "Stability 绔偣"), ensureConfigured(apiKey, "Stability API Key"));
+      return generateWithStability(input, ensureConfigured(endpointUrl, "Stability endpoint"), ensureConfigured(apiKey, "Stability API Key"));
     case "replicate":
-      return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate 绔偣"), ensureConfigured(apiKey, "Replicate API Token"));
+      return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate endpoint"), ensureConfigured(apiKey, "Replicate API Token"));
     case "gemini":
-      return generateWithGemini(input, ensureConfigured(modelName, "Gemini 模型"), ensureConfigured(apiKey, "Google API Key"));
+      return generateWithGemini(input, ensureConfigured(modelName, "Gemini model"), ensureConfigured(apiKey, "Google API Key"));
     case "custom":
-      return generateWithCustom(input, ensureConfigured(endpointUrl, "鑷畾涔?API 绔偣"), apiKey);
+      return generateWithCustom(input, ensureConfigured(endpointUrl, "Custom API endpoint"), apiKey);
     case "midjourney-async":
     case "dashscope-async":
     case "volcengine-async":
     case "xfyun-async":
       throw new Error(`${option.label} is an async-only provider and cannot be used for immediate preview generation tests.`);
     case "fal-queue":
-      return generateWithFalQueue(input, ensureConfigured(endpointUrl, "fal.ai 绔偣"), ensureConfigured(apiKey, "fal.ai API Key"));
+      return generateWithFalQueue(input, ensureConfigured(endpointUrl, "fal.ai endpoint"), ensureConfigured(apiKey, "fal.ai API Key"));
     default:
       throw new Error(`Unsupported adapter: ${option.adapter}`);
   }
 }
 
 export async function generatePreviewImage(input: GenerateInput) {
-  const primaryKey = input.modelKey;
-  const configuredProviders = await getProviderConfigs();
-  const fallbackKeys = configuredProviders
-    .filter(
-      (provider) =>
-        provider.key !== primaryKey &&
-        provider.isEnabled &&
-        provider.hasApiKey &&
-        provider.option?.supportsPreviewGeneration &&
-        (provider.option?.adapter === "openai-edit" || provider.option?.adapter === "custom"),
-    )
-    .map((provider) => provider.key);
-
-  const attemptKeys = [primaryKey, ...fallbackKeys];
-  let lastError: Error | null = null;
-  let generated:
-    | {
-        outputBuffer: Buffer;
-        contentType: string;
-        metadata: Record<string, unknown> | null;
-      }
-    | null = null;
-  let usedModelKey = primaryKey;
-
-  for (const modelKey of attemptKeys) {
-    try {
-      generated = await runProviderImageGeneration({
-        ...input,
-        modelKey,
-      });
-      usedModelKey = modelKey;
-      break;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Unknown provider error");
-    }
-  }
-
-  if (!generated) {
-    throw lastError ?? new Error("All configured models failed");
-  }
+  const generated = await runProviderImageGeneration(input);
+  const usedModelKey = input.modelKey;
 
   if (hasSourceImage(input) && !generated.metadata?.sourceImageForwarded) {
     throw new Error(
@@ -843,7 +913,7 @@ export async function generatePreviewImage(input: GenerateInput) {
     metadata: {
       ...(generated.metadata ?? {}),
       usedModelKey,
-      fallbackUsed: usedModelKey !== primaryKey,
+      fallbackUsed: false,
     },
   };
 }

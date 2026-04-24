@@ -66,6 +66,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Image test failed";
-    return NextResponse.json({ ok: false, message }, { status: 500 });
+    const status =
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      typeof (error as { status?: unknown }).status === "number"
+        ? ((error as { status: number }).status || 500)
+        : 500;
+    return NextResponse.json({ ok: false, message }, { status });
   }
 }

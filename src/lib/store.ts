@@ -271,7 +271,7 @@ async function listAllObjects(prefix: string) {
 
 function ensureDefaultProviders(existing: ProviderRecord[]): ProviderRecord[] {
   const now = nowIso();
-  const allowedProviderIds = new Set(["google", "custom"]);
+  const allowedProviderIds = new Set(["google", "openai", "custom"]);
   const defaults = PROVIDERS
     .filter((def) => allowedProviderIds.has(def.id))
     .map<ProviderRecord>((def) => ({
@@ -408,7 +408,7 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
 
   const providers: ProviderSummary[] = ensureDefaultProviders(
     [...(state.providers as ProviderRecord[])],
-  ).filter((p) => p.providerDefId === "google" || p.providerDefId === "custom" || p.id === "google" || p.id === "custom").map((p) => ({
+  ).filter((p) => p.providerDefId === "google" || p.providerDefId === "openai" || p.providerDefId === "custom" || p.id === "google" || p.id === "openai" || p.id === "custom").map((p) => ({
     id: p.id,
     providerDefId: p.providerDefId,
     label: p.label,
@@ -1014,7 +1014,7 @@ export async function forceRefreshCache() {
 export async function pruneProvidersToGoogleAndCustom() {
   await mutateState((state) => {
     const v3 = migrateV2ToV3(state);
-    const allowed = new Set(["google", "custom"]);
+    const allowed = new Set(["google", "openai", "custom"]);
     const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]).filter(
       (provider) => allowed.has(provider.providerDefId || provider.id),
     );

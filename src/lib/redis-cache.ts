@@ -32,9 +32,15 @@ export async function getRedisCache(): Promise<AppState | null> {
   try {
     const redis = getReadOnlyRedis();
     if (!redis) return null;
-    const raw = await redis.get<string>(REDIS_KEY);
+    const raw = await redis.get(REDIS_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AppState;
+    if (typeof raw === "string") {
+      return JSON.parse(raw) as AppState;
+    }
+    if (typeof raw === "object") {
+      return raw as AppState;
+    }
+    return null;
   } catch (err) {
     // Redis unavailable → fallback to S3 (non-blocking)
     console.warn("[redis-cache] GET failed, falling back to S3:", (err as Error).message);
