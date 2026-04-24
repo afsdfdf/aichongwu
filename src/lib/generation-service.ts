@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { generatePreviewImage } from "@/lib/ai";
-import { optimizeImageForAI } from "@/lib/image-optimizer";
 import { uploadBufferToS3 } from "@/lib/s3";
 import {
   createGenerationRecord,
@@ -82,21 +81,11 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
     throw new Error("未找到对应产品提示词。请先在后台发布提示词版本。");
   }
 
-  const sourceUploadPromise = uploadBufferToS3({
+  const sourceUpload = await uploadBufferToS3({
     buffer: input.sourceBuffer,
     folder: "source",
     contentType: input.sourceContentType,
   });
-  const aiInputPromise = optimizeImageForAI(input.sourceBuffer, input.sourceContentType);
-  const [sourceUpload, aiInput] = await Promise.all([sourceUploadPromise, aiInputPromise]);
-
-  const optimizedSourceUpload = aiInput.optimized
-    ? await uploadBufferToS3({
-        buffer: aiInput.buffer,
-        folder: "source-optimized",
-        contentType: aiInput.contentType,
-      })
-    : null;
 
   const composed = buildPromptText(runtime.prompt.version.promptTemplate, {
     productType: input.productType,
@@ -113,9 +102,9 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
   const generated = await generatePreviewImage({
     modelKey,
     prompt: composed.fullPrompt,
-    sourceImageBuffer: aiInput.buffer,
-    sourceImageContentType: aiInput.contentType,
-    sourceImageUrl: optimizedSourceUpload?.url || sourceUpload.url,
+    sourceImageBuffer: input.sourceBuffer,
+    sourceImageContentType: input.sourceContentType,
+    sourceImageUrl: sourceUpload.url,
     productType: input.productType,
     aspectRatio: runtime.prompt.version.aspectRatio ?? undefined,
   });
@@ -141,8 +130,6 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
       ...(generated.metadata ?? {}),
       routePolicyId: runtime.route?.route.id ?? null,
       connectionId: `${legacyStore.setting.modelProvider}:${modelKey}`,
-      sourceImageOptimizedUrl: optimizedSourceUpload?.url ?? null,
-      sourceImageOptimization: aiInput.metadata,
       promptTemplateId: runtime.prompt.template.id,
       promptVersion: runtime.prompt.version.version,
       requestMode: input.mode,
