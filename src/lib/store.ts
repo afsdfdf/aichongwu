@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+﻿import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
 import {
   GetObjectCommand,
@@ -82,7 +82,7 @@ async function streamToString(stream: AsyncIterable<Uint8Array>) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-// ── Encryption helpers ──
+// 鈹€鈹€ Encryption helpers 鈹€鈹€
 
 function getCipherKey() {
   const secret = process.env.AUTH_SECRET;
@@ -119,7 +119,7 @@ function decryptSecret(value: string | null) {
   return decrypted.toString("utf8");
 }
 
-// ── v2 → v3 Migration ──
+// 鈹€鈹€ v2 鈫?v3 Migration 鈹€鈹€
 
 function migrateV2ToV3(state: AppState): AppState {
   if (state.version === 3) return state;
@@ -174,7 +174,7 @@ function migrateV2ToV3(state: AppState): AppState {
   };
 }
 
-// ── S3 Read / Write ──
+// 鈹€鈹€ S3 Read / Write 鈹€鈹€
 
 async function readStateFromS3(): Promise<AppState> {
   const cached = await getRedisCache();
@@ -225,7 +225,7 @@ async function writeStateToS3(state: AppState) {
   await setRedisCache(state);
 }
 
-// ── Write mutex ──
+// 鈹€鈹€ Write mutex 鈹€鈹€
 let writeQueue: Promise<AppState> | null = null;
 
 async function mutateState(mutator: (state: AppState) => AppState | Promise<AppState>) {
@@ -267,30 +267,33 @@ async function listAllObjects(prefix: string) {
   return items;
 }
 
-// ── Ensure defaults ──
+// 鈹€鈹€ Ensure defaults 鈹€鈹€
 
 function ensureDefaultProviders(existing: ProviderRecord[]): ProviderRecord[] {
   const now = nowIso();
-  const defaults = PROVIDERS.map<ProviderRecord>((def) => ({
-    id: def.id,
-    providerDefId: def.id,
-    label: def.label,
-    apiKeyEncrypted: null,
+  const allowedProviderIds = new Set(["google", "custom"]);
+  const defaults = PROVIDERS
+    .filter((def) => allowedProviderIds.has(def.id))
+    .map<ProviderRecord>((def) => ({
+      id: def.id,
+      providerDefId: def.id,
+      label: def.label,
+      apiKeyEncrypted: null,
     baseUrl: def.defaultBaseUrl || null,
     isEnabled: true,
     createdAt: now,
     updatedAt: now,
-    models: def.models.map((m, idx) => ({
-      id: m.id,
-      modelName: m.modelName,
-      adapter: m.adapter as string,
-      endpoint: m.defaultEndpoint,
+      models: def.models.map((m, idx) => ({
+        id: m.id,
+        modelName: m.modelName,
+        adapter: m.adapter as string,
+        endpoint: m.defaultEndpoint,
       isEnabled: true,
       priority: idx + 1,
       createdAt: now,
-      updatedAt: now,
-    })),
-  }));
+        updatedAt: now,
+      })),
+    }));
 
   for (const defDefault of defaults) {
     const existingProvider = existing.find((p) => p.providerDefId === defDefault.providerDefId);
@@ -305,22 +308,27 @@ function ensureDefaultProviders(existing: ProviderRecord[]): ProviderRecord[] {
     }
   }
 
-  return existing;
+  return existing.filter((provider) => allowedProviderIds.has(provider.providerDefId || provider.id));
 }
 
 function ensureDefaultSetting(shopDomain: string, existing?: StoreSettingRecord): StoreSettingRecord {
   const now = nowIso();
-  return (
-    existing ?? {
-      shopDomain,
-      activeModel: "gpt-image-1",
-      requireGeneration: true,
-      widgetAccentColor: "#2B473F",
-      widgetButtonText: "Upload Your Pet Photo",
-      createdAt: now,
-      updatedAt: now,
-    }
-  );
+  return {
+    shopDomain,
+    activeModel: "gemini-3.1-flash-image",
+    modelProvider: "google",
+    modelApiKeyEncrypted: null,
+    modelBaseUrl: "https://generativelanguage.googleapis.com",
+    modelEndpoint: "/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+    modelName: "gemini-3.1-flash-image-preview",
+    modelAdapter: "gemini",
+    requireGeneration: true,
+    widgetAccentColor: "#2B473F",
+    widgetButtonText: "Upload Your Pet Photo",
+    createdAt: now,
+    updatedAt: now,
+    ...existing,
+  };
 }
 
 export async function ensureStoreDefaults(shopDomain = getDefaultShopDomain()) {
@@ -367,7 +375,7 @@ export async function ensureStoreDefaults(shopDomain = getDefaultShopDomain()) {
   return updated;
 }
 
-// ── Public: get store context for UI ──
+// 鈹€鈹€ Public: get store context for UI 鈹€鈹€
 
 export type ProviderSummary = {
   id: string;
@@ -400,7 +408,7 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
 
   const providers: ProviderSummary[] = ensureDefaultProviders(
     [...(state.providers as ProviderRecord[])],
-  ).map((p) => ({
+  ).filter((p) => p.providerDefId === "google" || p.providerDefId === "custom" || p.id === "google" || p.id === "custom").map((p) => ({
     id: p.id,
     providerDefId: p.providerDefId,
     label: p.label,
@@ -423,7 +431,7 @@ export async function getStoreContext(shopDomain = getDefaultShopDomain()) {
   return { prompts, setting, providers, importedAssets };
 }
 
-// ── Prompt CRUD ──
+// 鈹€鈹€ Prompt CRUD 鈹€鈹€
 
 export async function resolvePromptForProduct(input: { shopDomain: string; productType: string }) {
   const { prompts } = await getStoreContext(input.shopDomain);
@@ -489,11 +497,18 @@ export async function deletePromptRecord(id: string) {
   }));
 }
 
-// ── Store settings ──
+// 鈹€鈹€ Store settings 鈹€鈹€
 
 export async function saveStoreSettingRecord(input: {
   shopDomain: string;
   activeModel: string;
+  modelProvider?: "google" | "custom";
+  modelApiKey?: string;
+  keepExistingModelApiKey?: boolean;
+  modelBaseUrl?: string | null;
+  modelEndpoint?: string | null;
+  modelName?: string | null;
+  modelAdapter?: string | null;
   requireGeneration: boolean;
   widgetAccentColor: string;
   widgetButtonText: string;
@@ -504,6 +519,23 @@ export async function saveStoreSettingRecord(input: {
     const next: StoreSettingRecord = {
       shopDomain: input.shopDomain,
       activeModel: input.activeModel,
+      modelProvider: input.modelProvider ?? current?.modelProvider ?? "google",
+      modelApiKeyEncrypted:
+        typeof input.modelApiKey === "string" && input.modelApiKey.trim()
+          ? encryptSecret(input.modelApiKey.trim())
+          : input.keepExistingModelApiKey
+            ? current?.modelApiKeyEncrypted ?? null
+            : current?.modelApiKeyEncrypted ?? null,
+      modelBaseUrl:
+        input.modelBaseUrl !== undefined ? input.modelBaseUrl : current?.modelBaseUrl ?? "https://generativelanguage.googleapis.com",
+      modelEndpoint:
+        input.modelEndpoint !== undefined
+          ? input.modelEndpoint
+          : current?.modelEndpoint ?? "/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+      modelName:
+        input.modelName !== undefined ? input.modelName : current?.modelName ?? "gemini-3.1-flash-image-preview",
+      modelAdapter:
+        input.modelAdapter !== undefined ? input.modelAdapter : current?.modelAdapter ?? "gemini",
       requireGeneration: input.requireGeneration,
       widgetAccentColor: input.widgetAccentColor,
       widgetButtonText: input.widgetButtonText,
@@ -521,7 +553,7 @@ export async function saveStoreSettingRecord(input: {
   });
 }
 
-// ── Provider config save (v3) ──
+// 鈹€鈹€ Provider config save (v3) 鈹€鈹€
 
 export async function saveProviderRecord(input: {
   providerId: string;
@@ -607,7 +639,7 @@ export async function saveProviderRecord(input: {
   });
 }
 
-// ── Backward-compatible: saveProviderConfigs (v2 style) ──
+// 鈹€鈹€ Backward-compatible: saveProviderConfigs (v2 style) 鈹€鈹€
 
 export async function saveProviderConfigs(
   updates: Array<{
@@ -649,80 +681,59 @@ export async function saveProviderConfigs(
   }
 }
 
-// ── Get provider configs (for AI backend) ──
+// 鈹€鈹€ Get provider configs (for AI backend) 鈹€鈹€
 
 export async function getProviderConfigs() {
-  const state = await readStateFromS3();
-  const v3 = migrateV2ToV3(state);
-  const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
-
-  return providers.flatMap((p) =>
-    p.models.map((m) => ({
-      key: m.id,
-      label: `${p.label} / ${m.id}`,
-      apiKeyEncrypted: p.apiKeyEncrypted,
-      webhookUrl: m.endpoint,
-      baseUrl: p.baseUrl,
-      modelName: m.modelName,
-      isEnabled: m.isEnabled && p.isEnabled,
-      priority: m.priority,
-      option: getModelOption(m.id),
-      hasApiKey: Boolean(p.apiKeyEncrypted),
-      providerId: p.id,
-      adapter: m.adapter,
-    })),
-  ).sort((a, b) => a.priority - b.priority);
+  const { setting } = await getStoreContext();
+  return [
+    {
+      key: setting.activeModel,
+      label: `${setting.modelProvider} / ${setting.activeModel}`,
+      apiKeyEncrypted: setting.modelApiKeyEncrypted,
+      webhookUrl: setting.modelEndpoint,
+      baseUrl: setting.modelBaseUrl,
+      modelName: setting.modelName || setting.activeModel,
+      isEnabled: true,
+      priority: 1,
+      option: getModelOption(setting.activeModel),
+      hasApiKey: Boolean(setting.modelApiKeyEncrypted),
+      providerId: setting.modelProvider,
+      adapter: setting.modelAdapter || "custom",
+    },
+  ];
 }
 
 // Internal-only: returns decrypted API key for backend AI calls
 export async function getProviderConfigWithKey(key: string) {
-  const state = await readStateFromS3();
-  const v3 = migrateV2ToV3(state);
-  const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]);
-
-  for (const p of providers) {
-    const model = p.models.find((m) => m.id === key);
-    if (model) {
-      const providerDef = getProviderById(p.providerDefId);
-      const fullEndpoint = buildFullEndpoint(providerDef, p, model);
-      return {
-        key: model.id,
-        label: `${p.label} / ${model.id}`,
-        apiKeyEncrypted: p.apiKeyEncrypted,
-        apiKey: decryptSecret(p.apiKeyEncrypted),
-        webhookUrl: model.endpoint,
-        baseUrl: p.baseUrl,
-        modelName: model.modelName,
-        isEnabled: model.isEnabled && p.isEnabled,
-        priority: model.priority,
-        option: getModelOption(model.id),
-        hasApiKey: Boolean(p.apiKeyEncrypted),
-        providerId: p.id,
-        providerDefId: p.providerDefId,
-        adapter: model.adapter,
-        fullEndpoint,
-      };
-    }
-  }
-  return null;
-}
-
-function buildFullEndpoint(
-  providerDef: ReturnType<typeof getProviderById>,
-  provider: ProviderRecord,
-  model: ModelInstanceRecord,
-): string {
-  if (model.endpoint?.startsWith("http")) return model.endpoint;
-  const base = provider.baseUrl || providerDef?.defaultBaseUrl || "";
-  const path = model.endpoint || "";
-  return `${base}${path}`;
+  const { setting } = await getStoreContext();
+  if (key !== setting.activeModel) return null;
+  const baseUrl = setting.modelBaseUrl || "";
+  const endpoint = setting.modelEndpoint || "";
+  const fullEndpoint = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
+  return {
+    key: setting.activeModel,
+    label: `${setting.modelProvider} / ${setting.activeModel}`,
+    apiKeyEncrypted: setting.modelApiKeyEncrypted,
+    apiKey: decryptSecret(setting.modelApiKeyEncrypted),
+    webhookUrl: setting.modelEndpoint,
+    baseUrl: setting.modelBaseUrl,
+    modelName: setting.modelName || setting.activeModel,
+    isEnabled: true,
+    priority: 1,
+    option: getModelOption(setting.activeModel),
+    hasApiKey: Boolean(setting.modelApiKeyEncrypted),
+    providerId: setting.modelProvider,
+    providerDefId: setting.modelProvider,
+    adapter: setting.modelAdapter || "custom",
+    fullEndpoint,
+  };
 }
 
 export async function getProviderConfigByKey(key: string) {
   return getProviderConfigWithKey(key);
 }
 
-// ── Generation records ──
+// 鈹€鈹€ Generation records 鈹€鈹€
 
 export async function createGenerationRecord(input: Omit<GenerationRecord, "id" | "createdAt" | "updatedAt">) {
   const record: GenerationRecord = {
@@ -922,7 +933,7 @@ export async function syncHistoricalGenerationsFromBucket(shopDomain = getDefaul
       id: `legacy-${result.ts}-${result.key.split("/").pop()?.split(".")[0] ?? randomUUID()}`,
       shopDomain,
       productType: "legacy-import",
-      productTitle: "历史导入记录",
+      productTitle: "鍘嗗彶瀵煎叆璁板綍",
       shopifyProductId: null,
       shopifyVariantId: null,
       customerEmail: null,
@@ -998,4 +1009,41 @@ export async function forceRefreshCache() {
   await invalidateRedisCache();
   const fresh = await readStateFromS3();
   return fresh;
+}
+
+export async function pruneProvidersToGoogleAndCustom() {
+  await mutateState((state) => {
+    const v3 = migrateV2ToV3(state);
+    const allowed = new Set(["google", "custom"]);
+    const providers = ensureDefaultProviders([...(v3.providers as ProviderRecord[])]).filter(
+      (provider) => allowed.has(provider.providerDefId || provider.id),
+    );
+
+    const shopDomain = getDefaultShopDomain();
+    const currentSetting = ensureDefaultSetting(
+      shopDomain,
+      v3.settings.find((item) => item.shopDomain === shopDomain),
+    );
+
+    const activeModelStillExists = providers.some((provider) =>
+      provider.models.some((model) => model.id === currentSetting.activeModel),
+    );
+
+    const nextSettings = v3.settings.map((item) =>
+      item.shopDomain === shopDomain
+        ? {
+            ...item,
+            activeModel: activeModelStillExists ? item.activeModel : "gemini-3.1-flash-image",
+            updatedAt: nowIso(),
+          }
+        : item,
+    );
+
+    return {
+      ...v3,
+      version: 3,
+      providers,
+      settings: nextSettings,
+    };
+  });
 }

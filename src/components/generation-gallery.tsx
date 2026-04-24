@@ -44,6 +44,8 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
     () => rows.find((item) => item.id === selectedId) ?? null,
     [rows, selectedId],
   );
+  const getPreviewUrl = (item: Pick<GenerationGalleryItem, "outputImageUrl" | "sourceImageUrl">) =>
+    item.outputImageUrl || item.sourceImageUrl || null;
 
   const allSelectedOnPage = pagedRows.length > 0 && pagedRows.every((item) => selectedIds.includes(item.id));
 
@@ -120,6 +122,7 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
       <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
         {pagedRows.map((item) => {
           const checked = selectedIds.includes(item.id);
+          const previewUrl = getPreviewUrl(item);
           return (
             <div
               key={item.id}
@@ -147,11 +150,17 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                 className="block w-full"
               >
                 <div className="bg-[#f8fafc] px-2 pb-2">
-                  <img
-                    src={item.outputImageUrl}
-                    alt={item.productTitle || item.productType}
-                    className="aspect-square w-full rounded-lg object-cover"
-                  />
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt={item.productTitle || item.productType}
+                      className="aspect-square w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                      No image
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 px-3 pb-3 pt-1">
@@ -234,11 +243,25 @@ export function GenerationGallery({ rows }: { rows: GenerationGalleryItem[] }) {
                 </div>
 
                 <div className="overflow-hidden rounded-xl bg-white/[0.04] p-3">
-                  <img
-                    src={activeTab === "result" ? selected.outputImageUrl : selected.sourceImageUrl}
-                    alt={selected.productTitle || selected.productType}
-                    className="aspect-square w-full rounded-lg object-cover"
-                  />
+                  {getPreviewUrl({
+                    outputImageUrl: activeTab === "result" ? selected.outputImageUrl : "",
+                    sourceImageUrl: activeTab === "source" ? selected.sourceImageUrl : "",
+                  }) ? (
+                    <img
+                      src={
+                        getPreviewUrl({
+                          outputImageUrl: activeTab === "result" ? selected.outputImageUrl : "",
+                          sourceImageUrl: activeTab === "source" ? selected.sourceImageUrl : "",
+                        }) ?? undefined
+                      }
+                      alt={selected.productTitle || selected.productType}
+                      className="aspect-square w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-white/[0.04] text-sm text-slate-400">
+                      No image available
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">

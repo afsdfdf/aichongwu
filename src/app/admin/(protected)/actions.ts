@@ -2,16 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "@/lib/auth";
-import {
-  removePromptTemplate,
-  saveConnection,
-  savePromptTemplateWithVersion,
-  saveRoutePolicy,
-  saveSystemSettings,
-} from "@/lib/config-center/service";
+import { removePromptTemplate, savePromptTemplateWithVersion } from "@/lib/config-center/service";
 import {
   getStoreContext,
   importExistingBucketAssets,
+  saveStoreSettingRecord,
   syncHistoricalGenerationsFromBucket,
 } from "@/lib/store";
 import { formatDateTimeISO, getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
@@ -30,7 +25,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
   const isActive = formData.get("isActive") === "on";
 
   if (!productType || !displayName || !promptTemplate) {
-    return { ok: false, message: "请完整填写商品类型、显示名称和提示词。" };
+    return { ok: false, message: "Product type, display name, and prompt are required." };
   }
 
   await savePromptTemplateWithVersion({
@@ -50,7 +45,7 @@ export async function savePromptAction(_prevState: ActionState, formData: FormDa
 
   return {
     ok: true,
-    message: `已保存到 ${getDefaultShopDomain()} / ${productType} / ${formatDateTimeISO(new Date())}`,
+    message: `Prompt saved for ${getDefaultShopDomain()} / ${productType} / ${formatDateTimeISO(new Date())}`,
   };
 }
 
@@ -62,7 +57,7 @@ export async function deletePromptAction(_prevState: ActionState, formData: Form
   }
   revalidatePath("/admin/prompts");
   revalidatePath("/admin");
-  return { ok: true, message: id ? `已删除 ${id}` : "" };
+  return { ok: true, message: id ? `Deleted ${id}` : "" };
 }
 
 export async function saveStoreSettingAction(
@@ -71,63 +66,42 @@ export async function saveStoreSettingAction(
 ): Promise<ActionState> {
   await requireAdminSession();
 
-  const { setting, providers } = await getStoreContext(getDefaultShopDomain());
+  const { setting } = await getStoreContext(getDefaultShopDomain());
 
-  const providerId = String(formData.get("providerId") || "").trim();
-  const activeModel = String(formData.get("activeModel") || setting.activeModel || "gpt-image-1");
+  const providerId = String(formData.get("providerId") || setting.modelProvider || "google").trim() as "google" | "custom";
+  const activeModel = String(formData.get("activeModel") || setting.activeModel || "gemini-3.1-flash-image").trim();
+  const modelName = String(formData.get("modelName") || "").trim() || activeModel;
   const apiKey = String(formData.get("apiKey") || "");
-  const baseUrl = String(formData.get("baseUrl") || "").trim();
+  const baseUrl =
+    String(formData.get("baseUrl") || "").trim() ||
+    (providerId === "google" ? "https://generativelanguage.googleapis.com" : "");
+  const modelEndpoint =
+    providerId === "google"
+      ? `/v1beta/models/${modelName}:generateContent`
+      : String(formData.get("modelEndpoint") || "").trim();
+  const modelAdapter = providerId === "google" ? "gemini" : "custom";
   const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
   const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "Upload Your Pet Photo");
 
-  await saveSystemSettings({
-    shopifyStoreDomain: getDefaultShopDomain(),
+  await saveStoreSettingRecord({
+    shopDomain: getDefaultShopDomain(),
+    activeModel,
+    modelProvider: providerId,
+    modelApiKey: apiKey,
+    keepExistingModelApiKey: !apiKey.trim(),
+    modelBaseUrl: baseUrl || null,
+    modelEndpoint: modelEndpoint || null,
+    modelName,
+    modelAdapter,
+    requireGeneration: setting.requireGeneration,
     widgetAccentColor,
     widgetButtonText,
-    requireGenerationBeforeAddToCart: setting.requireGeneration,
   });
-
-  if (providerId) {
-    const provider = providers.find((item) => item.id === providerId || item.providerDefId === providerId);
-
-    if (provider) {
-      for (const model of provider.models) {
-        await saveConnection({
-          id: `${provider.id}:${model.id}`,
-          legacyProviderId: provider.id,
-          modelCode: model.id,
-          modelDisplayName: model.modelName,
-          endpointPath: model.endpoint,
-          enabled: model.isEnabled,
-          priority: model.priority,
-          baseUrl: baseUrl || provider.baseUrl || null,
-          secret: apiKey || undefined,
-        });
-      }
-    }
-
-    await saveRoutePolicy({
-      id: "generate:*",
-      name: "Default Generate Route",
-      scene: "generate",
-      productType: "*",
-      enabled: true,
-      primaryConnectionId: activeModel,
-    });
-
-    revalidatePath("/admin");
-    revalidatePath("/admin/settings");
-    revalidatePath("/admin/install");
-    return {
-      ok: true,
-      message: `${providerId} 配置已保存，并同步默认路由。`,
-    };
-  }
 
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/install");
-  return { ok: true, message: "设置已保存。" };
+  return { ok: true, message: "Model configuration saved." };
 }
 
 export async function importBucketAssetsAction(
@@ -148,7 +122,7 @@ export async function importBucketAssetsAction(
   revalidatePath("/admin/install");
   return {
     ok: true,
-    message: `已从 S3 导入 ${imported.length} 个对象${prefix ? `（prefix: ${prefix}）` : ""}。`,
+    message: `Imported ${imported.length} objects from S3${prefix ? ` (prefix: ${prefix})` : ""}.`,
   };
 }
 
@@ -160,6 +134,6 @@ export async function syncHistoryAction(): Promise<ActionState> {
   revalidatePath("/admin/generations");
   return {
     ok: true,
-    message: `历史同步完成：扫描到 ${result.totalHistoricalPairs} 对原图/效果图，当前后台共 ${result.totalGenerations} 条记录。`,
+    message: `Historical sync completed. Found ${result.totalHistoricalPairs} source/output pairs and ${result.totalGenerations} generation records.`,
   };
 }

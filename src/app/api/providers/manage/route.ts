@@ -112,6 +112,9 @@ export async function POST(request: Request) {
     if (!providerId || !modelId) {
       return NextResponse.json({ message: "缺少 providerId 或 modelId" }, { status: 400 });
     }
+    if (providerId !== "google" && providerId !== "custom") {
+      return NextResponse.json({ message: "仅支持 Google 和自定义模型" }, { status: 400 });
+    }
 
     await saveConnection({
       legacyProviderId: providerId,

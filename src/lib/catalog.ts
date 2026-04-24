@@ -39,7 +39,7 @@ export type ModelDefinition = {
 
 // ── All providers ──
 
-export const PROVIDERS: ProviderDefinition[] = [
+const ALL_PROVIDERS: ProviderDefinition[] = [
   // ── 1. OpenAI ──
   {
     id: "openai",
@@ -642,6 +642,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     ],
   },
 ];
+
+const ALLOWED_PROVIDER_IDS = new Set(["google", "custom"]);
+
+export const PROVIDERS: ProviderDefinition[] = ALL_PROVIDERS.filter((provider) =>
+  ALLOWED_PROVIDER_IDS.has(provider.id),
+);
 
 // ── Lookup helpers ──
 

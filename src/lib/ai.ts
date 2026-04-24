@@ -1,4 +1,5 @@
-import OpenAI from "openai";
+﻿import OpenAI from "openai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { getModelOption, type ModelAdapter } from "@/lib/catalog";
 import { fetchRemoteFileAsBuffer, uploadBufferToS3 } from "@/lib/s3";
 import { getProviderConfigByKey, getProviderConfigs } from "@/lib/store";
@@ -268,8 +269,8 @@ async function generateWithStability(input: GenerateInput, endpointUrl: string, 
 }
 
 async function pollReplicate(getUrl: string, apiKey: string) {
-  // Vercel hobby=10s, pro=60s, enterprise=300s — stay well under limits
-  const MAX_ATTEMPTS = 25; // 25 × 2s = 50s max polling
+  // Vercel hobby=10s, pro=60s, enterprise=300s 鈥?stay well under limits
+  const MAX_ATTEMPTS = 25; // 25 脳 2s = 50s max polling
   const POLL_INTERVAL_MS = 2000;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -297,7 +298,7 @@ async function pollReplicate(getUrl: string, apiKey: string) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
-  throw new Error("Replicate polling timed out (50s). The model may still be processing — check your Replicate dashboard.");
+  throw new Error("Replicate polling timed out (50s). The model may still be processing 鈥?check your Replicate dashboard.");
 }
 
 async function generateWithReplicate(input: GenerateInput, endpointUrl: string, apiKey: string) {
@@ -368,7 +369,7 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
     status?: string;
   };
 
-  // Synchronous response — images returned directly
+  // Synchronous response 鈥?images returned directly
   if (payload.images?.[0]?.url) {
     return normalizeRemoteImage({
       imageUrl: payload.images[0].url,
@@ -376,7 +377,7 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
     });
   }
 
-  // Async queue — poll for result
+  // Async queue 鈥?poll for result
   const requestId = payload.request_id;
   if (!requestId) {
     throw new Error("fal.ai returned no images and no request_id for polling");
@@ -413,69 +414,40 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
   throw new Error("fal.ai polling timed out (50s). Check your fal.ai dashboard for the result.");
 }
 
-async function generateWithGemini(input: GenerateInput, endpointUrl: string, apiKey: string) {
-  const isOfficialGoogleEndpoint = endpointUrl.includes("generativelanguage.googleapis.com");
-  const url = isOfficialGoogleEndpoint
-    ? `${endpointUrl}${endpointUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`
-    : endpointUrl;
+async function generateWithGemini(input: GenerateInput, modelName: string, apiKey: string) {
+  const ai = new GoogleGenAI({ apiKey });
+  const contents: Array<Record<string, unknown>> = [{ text: input.prompt }];
 
-  const parts: Array<Record<string, unknown>> = [{ text: input.prompt }];
   if (hasSourceImage(input)) {
-    parts.push({
-      inline_data: {
-        mime_type: input.sourceImageContentType || "image/png",
+    contents.push({
+      inlineData: {
+        mimeType: input.sourceImageContentType || "image/png",
         data: sourceImageBase64(input),
       },
     });
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(isOfficialGoogleEndpoint ? {} : { Authorization: `Bearer ${apiKey}` }),
+  const payload = await ai.models.generateContent({
+    model: modelName || "gemini-3.1-flash-image-preview",
+    contents,
+    config: {
+      responseModalities: [Modality.TEXT, Modality.IMAGE],
     },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts,
-        },
-      ],
-    }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Gemini request failed: ${response.status}`);
-  }
-
-  const payload = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          inlineData?: { data?: string; mimeType?: string };
-          inline_data?: { data?: string; mimeType?: string; mime_type?: string };
-        }>;
-      };
-    }>;
-  };
-
-  const imagePart = payload.candidates?.[0]?.content?.parts?.find(
-    (part) => part.inlineData || part.inline_data,
-  );
-  const inlineData = (imagePart?.inlineData || imagePart?.inline_data) as
-    | { data?: string; mimeType?: string; mime_type?: string }
-    | undefined;
+  const imagePart = payload.candidates?.[0]?.content?.parts?.find((part) => "inlineData" in part && part.inlineData);
+  const inlineData = imagePart && "inlineData" in imagePart ? imagePart.inlineData : undefined;
   if (!inlineData?.data) {
     throw new Error("Gemini did not return inline image data");
   }
 
   return {
     outputBuffer: Buffer.from(inlineData.data, "base64"),
-    contentType: inlineData.mimeType || inlineData.mime_type || "image/png",
+    contentType: inlineData.mimeType || "image/png",
     metadata: {
       provider: "gemini",
       sourceImageForwarded: hasSourceImage(input),
-      endpointMode: isOfficialGoogleEndpoint ? "google-query-key" : "proxy-bearer",
+      endpointMode: "google-sdk",
     },
   };
 }
@@ -519,7 +491,7 @@ async function generateWithOpenAIChatImage(
     throw new Error("Chat completions returned no content");
   }
 
-  // ── Extract image from markdown ──
+  // 鈹€鈹€ Extract image from markdown 鈹€鈹€
   // Pattern 1: base64 data URI  ![alt](data:image/png;base64,XXXXXX)
   const base64Match = content.match(
     /!\[.*?\]\(data:(image\/[a-zA-Z+]+);base64,([A-Za-z0-9+/=]+)\)/,
@@ -792,20 +764,20 @@ async function runProviderImageGeneration(input: GenerateInput) {
         baseUrl,
       );
     case "stability":
-      return generateWithStability(input, ensureConfigured(endpointUrl, "Stability 端点"), ensureConfigured(apiKey, "Stability API Key"));
+      return generateWithStability(input, ensureConfigured(endpointUrl, "Stability 绔偣"), ensureConfigured(apiKey, "Stability API Key"));
     case "replicate":
-      return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate 端点"), ensureConfigured(apiKey, "Replicate API Token"));
+      return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate 绔偣"), ensureConfigured(apiKey, "Replicate API Token"));
     case "gemini":
-      return generateWithGemini(input, ensureConfigured(endpointUrl, "Gemini 端点"), ensureConfigured(apiKey, "Google API Key"));
+      return generateWithGemini(input, ensureConfigured(modelName, "Gemini 模型"), ensureConfigured(apiKey, "Google API Key"));
     case "custom":
-      return generateWithCustom(input, ensureConfigured(endpointUrl, "自定义 API 端点"), apiKey);
+      return generateWithCustom(input, ensureConfigured(endpointUrl, "鑷畾涔?API 绔偣"), apiKey);
     case "midjourney-async":
     case "dashscope-async":
     case "volcengine-async":
     case "xfyun-async":
-      throw new Error(`${option.label} 多数为异步任务型接口，当前支持配置校验，不支持即时生图测试。`);
+      throw new Error(`${option.label} is an async-only provider and cannot be used for immediate preview generation tests.`);
     case "fal-queue":
-      return generateWithFalQueue(input, ensureConfigured(endpointUrl, "fal.ai 端点"), ensureConfigured(apiKey, "fal.ai API Key"));
+      return generateWithFalQueue(input, ensureConfigured(endpointUrl, "fal.ai 绔偣"), ensureConfigured(apiKey, "fal.ai API Key"));
     default:
       throw new Error(`Unsupported adapter: ${option.adapter}`);
   }
@@ -917,11 +889,12 @@ export async function validateProviderSetup(modelKey: string) {
             : endpointUrl,
     ),
     message: option.adapter === "openai-chat-image"
-      ? `${option.label} — Chat Completions 模式，需 API Key${baseUrl ? "，Base URL: " + baseUrl : ""}`
-      : `${option.label} 配置已读取`,
+      ? `${option.label} - Chat Completions mode requires API Key${baseUrl ? ", Base URL: " + baseUrl : ""}`
+      : `${option.label} configuration is ready`,
     option,
     endpointUrl,
     hasApiKey: Boolean(apiKey),
     baseUrl: baseUrl || null,
   };
 }
+

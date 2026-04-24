@@ -44,6 +44,12 @@ export type PromptRecord = {
 export type StoreSettingRecord = {
   shopDomain: string;
   activeModel: string;
+  modelProvider: "google" | "custom";
+  modelApiKeyEncrypted: string | null;
+  modelBaseUrl: string | null;
+  modelEndpoint: string | null;
+  modelName: string | null;
+  modelAdapter: string | null;
   requireGeneration: boolean;
   widgetAccentColor: string;
   widgetButtonText: string;

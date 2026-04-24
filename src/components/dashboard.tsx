@@ -258,7 +258,17 @@ export function RecentActivityPanel({
         ) : (
           rows.map((item) => (
             <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <img src={item.outputImageUrl} alt={item.productType} className="aspect-square w-full rounded-lg object-cover" />
+              {item.outputImageUrl || item.sourceImageUrl ? (
+                <img
+                  src={item.outputImageUrl || item.sourceImageUrl}
+                  alt={item.productType}
+                  className="aspect-square w-full rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                  暂无图片
+                </div>
+              )}
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <StatusPill status={item.orderId ? "ordered" : item.status} />
                 <span className="rounded-lg bg-white px-2 py-0.5 text-[11px] text-slate-500">{item.modelUsed}</span>
