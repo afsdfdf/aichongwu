@@ -601,7 +601,17 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     return null;
   }
 
-  async function requestImagesEdit(editEndpoint: string, fallbackFromImagesEndpoint = false) {
+  function timeoutSignal(timeoutMs?: number) {
+    if (!timeoutMs) return undefined;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    if (typeof timeout === "object" && "unref" in timeout) {
+      timeout.unref();
+    }
+    return controller.signal;
+  }
+
+  async function requestImagesEdit(editEndpoint: string, fallbackFromImagesEndpoint = false, timeoutMs?: number) {
     const formData = new FormData();
     formData.append("model", modelName);
     formData.append("prompt", input.prompt);
@@ -620,6 +630,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
       body: formData,
+      signal: timeoutSignal(timeoutMs),
     });
 
     if (!response.ok) {
@@ -693,6 +704,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     endpoint: string;
     sourceMode: "base64" | "url";
     fallbackFromImagesEndpoint?: boolean;
+    timeoutMs?: number;
   }) {
     const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: input.prompt }];
 
@@ -723,6 +735,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         messages: [{ role: "user", content: messageContent.length === 1 ? input.prompt : messageContent }],
         max_tokens: 1024,
       }),
+      signal: timeoutSignal(params.timeoutMs),
     });
 
     if (!response.ok) {
@@ -811,7 +824,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     const editsEndpoint = editsEndpointFromImagesEndpoint();
     if (editsEndpoint) {
       try {
-        return await requestImagesEdit(editsEndpoint, true);
+        return await requestImagesEdit(editsEndpoint, true, 15_000);
       } catch (error) {
         console.warn(
           "[custom-images-fallback] edits fallback failed, trying chat image_url fallback:",
@@ -827,6 +840,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
           endpoint: chatEndpoint,
           sourceMode: "url",
           fallbackFromImagesEndpoint: true,
+          timeoutMs: 15_000,
         });
       } catch (error) {
         console.warn(
