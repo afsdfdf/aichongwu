@@ -128,7 +128,7 @@ export function ModelSettingsForm({
           </button>
         </div>
 
-        <form action={formAction} className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <form key={providerId} action={formAction} className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <input type="hidden" name="providerId" value={providerId} />
             <input type="hidden" name="widgetAccentColor" value={widgetAccentColor} />
