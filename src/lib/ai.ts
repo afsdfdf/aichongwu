@@ -1,6 +1,7 @@
 ﻿import OpenAI from "openai";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { getModelOption, type ModelAdapter } from "@/lib/catalog";
+import { exposeSecret, getConnectionById } from "@/lib/config-center/repository";
 import { fetchRemoteFileAsBuffer, uploadBufferToS3 } from "@/lib/s3";
 import { getProviderConfigByKey } from "@/lib/store";
 
@@ -39,6 +40,49 @@ function ensureImageAwareAdapter(adapter: ModelAdapter, label: string, input: Ge
 }
 
 async function resolveProvider(modelKey: string) {
+  const connection = await getConnectionById(modelKey);
+  if (connection) {
+    const exposed = exposeSecret(connection);
+    const option = getModelOption(connection.modelCode);
+    const baseUrl = connection.baseUrl || option?.defaultEndpoint?.replace(/\/[^/]+$/, "") || undefined;
+    const endpointPath = connection.submitUrl || connection.endpointPath || option?.defaultEndpoint || "";
+    const endpointUrl = endpointPath.startsWith("http")
+      ? endpointPath
+      : `${connection.baseUrl || ""}${endpointPath}`;
+    const legacyProvider =
+      !exposed.secret && exposed.metadata?.hasLegacySecret === true
+        ? await getProviderConfigByKey(connection.modelCode)
+        : null;
+    const savedAdapter = connection.adapter as ModelAdapter | undefined;
+
+    return {
+      option: {
+        ...(option || {
+          key: connection.modelCode,
+          formKey: connection.modelCode,
+          label: connection.name || connection.modelCode,
+          description: "Runtime model loaded from the active route connection.",
+          adapter: savedAdapter || "custom",
+          provider: connection.legacyProviderId || "Custom",
+          modelName: connection.modelDisplayName || connection.modelCode,
+          defaultEndpoint: endpointUrl,
+          docsHint: "",
+          supportsImageTest: true,
+          supportsPreviewGeneration: true,
+        }),
+        adapter: savedAdapter || option?.adapter || "custom",
+        provider: connection.legacyProviderId || option?.provider || "Custom",
+        modelName: connection.modelDisplayName || option?.modelName || connection.modelCode,
+        defaultEndpoint: endpointUrl || option?.defaultEndpoint || "",
+      },
+      provider: legacyProvider,
+      endpointUrl: endpointUrl || (legacyProvider as Record<string, unknown> | null)?.fullEndpoint as string | undefined || legacyProvider?.webhookUrl || "",
+      apiKey: exposed.secret || legacyProvider?.apiKey || null,
+      baseUrl: connection.baseUrl || legacyProvider?.baseUrl || undefined,
+      modelName: connection.modelDisplayName || legacyProvider?.modelName || option?.modelName || connection.modelCode,
+    };
+  }
+
   const option = getModelOption(modelKey);
   const provider = await getProviderConfigByKey(modelKey);
   if (!option && !provider) {
@@ -762,7 +806,12 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
           metadata: {
             provider: "custom-openai-compatible-chat",
             sourceImageForwarded: Boolean(messageContent.length > 1),
-            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+            sourceImageFallback:
+              params.fallbackFromImagesEndpoint
+                ? "chat-image-url"
+                : params.sourceMode === "url" && sourceProvided
+                  ? "chat-image-url"
+                  : null,
           },
         });
       }
@@ -780,7 +829,12 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
           metadata: {
             provider: "custom-openai-compatible-chat",
             sourceImageForwarded: Boolean(messageContent.length > 1),
-            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+            sourceImageFallback:
+              params.fallbackFromImagesEndpoint
+                ? "chat-image-url"
+                : params.sourceMode === "url" && sourceProvided
+                  ? "chat-image-url"
+                  : null,
           },
         };
       }
@@ -792,7 +846,12 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
           metadata: {
             provider: "custom-openai-compatible-chat",
             sourceImageForwarded: Boolean(messageContent.length > 1),
-            sourceImageFallback: params.fallbackFromImagesEndpoint ? "chat-image-url" : null,
+            sourceImageFallback:
+              params.fallbackFromImagesEndpoint
+                ? "chat-image-url"
+                : params.sourceMode === "url" && sourceProvided
+                  ? "chat-image-url"
+                  : null,
           },
         });
       }
@@ -817,7 +876,19 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       : input.prompt;
 
   if (isOpenAICompatibleChatApi) {
-    return requestChatCompletionsImage({ endpoint: endpointUrl, sourceMode: "base64" });
+    try {
+      return await requestChatCompletionsImage({ endpoint: endpointUrl, sourceMode: "base64" });
+    } catch (error) {
+      if (!sourceProvided || !input.sourceImageUrl) {
+        throw error;
+      }
+
+      console.warn(
+        "[custom-chat-fallback] base64 source image failed, retrying with uploaded image URL:",
+        error instanceof Error ? error.message : error,
+      );
+      return requestChatCompletionsImage({ endpoint: endpointUrl, sourceMode: "url" });
+    }
   }
 
   if (sourceProvided && input.sourceImageUrl && isOpenAICompatibleImagesApi) {

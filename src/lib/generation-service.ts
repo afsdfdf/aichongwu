@@ -94,7 +94,8 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
     negativePrompt: runtime.prompt.version.negativePrompt,
   });
 
-  const modelKey = legacyStore.setting.activeModel || runtime.route?.primary.modelCode;
+  const selectedConnection = runtime.route?.primary;
+  const modelKey = selectedConnection?.id || selectedConnection?.modelCode || legacyStore.setting.activeModel;
   if (!modelKey) {
     throw new Error("No active model configured. Please save a model in the admin settings first.");
   }
@@ -129,7 +130,7 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
     metadata: {
       ...(generated.metadata ?? {}),
       routePolicyId: runtime.route?.route.id ?? null,
-      connectionId: `${legacyStore.setting.modelProvider}:${modelKey}`,
+      connectionId: selectedConnection?.id ?? `${legacyStore.setting.modelProvider}:${modelKey}`,
       promptTemplateId: runtime.prompt.template.id,
       promptVersion: runtime.prompt.version.version,
       requestMode: input.mode,
