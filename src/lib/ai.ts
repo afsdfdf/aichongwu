@@ -130,6 +130,12 @@ async function resolveProvider(modelKey: string) {
   }
 
   const savedAdapter = provider?.adapter as ModelAdapter | undefined;
+  const upstreamModelName = resolveUpstreamModelName({
+    adapter: savedAdapter || option?.adapter,
+    modelCode: modelKey,
+    optionModelName: option?.modelName,
+    legacyModelName: provider?.modelName,
+  });
   const resolvedOption = {
     ...(option || {
       key: modelKey,
@@ -138,7 +144,7 @@ async function resolveProvider(modelKey: string) {
       description: "Runtime model loaded from the active saved configuration.",
       adapter: savedAdapter || "custom",
       provider: provider?.providerId || "Custom",
-      modelName: provider?.modelName || modelKey,
+      modelName: upstreamModelName,
       defaultEndpoint: provider?.webhookUrl || "",
       docsHint: "",
       supportsImageTest: true,
@@ -146,7 +152,7 @@ async function resolveProvider(modelKey: string) {
     }),
     adapter: savedAdapter || option?.adapter || "custom",
     provider: provider?.providerId || option?.provider || "Custom",
-    modelName: provider?.modelName || option?.modelName || modelKey,
+    modelName: upstreamModelName,
     defaultEndpoint: (provider as Record<string, unknown> | null)?.fullEndpoint as string | undefined
       || provider?.webhookUrl
       || option?.defaultEndpoint
@@ -164,7 +170,7 @@ async function resolveProvider(modelKey: string) {
     endpointUrl,
     apiKey: provider?.apiKey || null,
     baseUrl: provider?.baseUrl || undefined,
-    modelName: provider?.modelName || resolvedOption.modelName,
+    modelName: upstreamModelName,
   };
 }
 

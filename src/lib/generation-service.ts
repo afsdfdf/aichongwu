@@ -95,7 +95,7 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
   });
 
   const selectedConnection = runtime.route?.primary;
-  const modelKey = selectedConnection?.id || selectedConnection?.modelCode || legacyStore.setting.activeModel;
+  const modelKey = legacyStore.setting.activeModel || selectedConnection?.id || selectedConnection?.modelCode;
   if (!modelKey) {
     throw new Error("No active model configured. Please save a model in the admin settings first.");
   }
