@@ -22,6 +22,25 @@ type ProviderImageResult = {
   metadata?: Record<string, unknown> | null;
 };
 
+async function readProviderJson<T>(response: Response, label: string): Promise<T> {
+  const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    const preview = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+    throw new Error(
+      `${label} returned non-JSON response: ${response.status} ${response.statusText}${preview ? ` - ${preview}` : ""}`,
+    );
+  }
+
+  try {
+    return JSON.parse(text || "{}") as T;
+  } catch {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 300);
+    throw new Error(`${label} returned invalid JSON: ${preview || "empty response"}`);
+  }
+}
+
 function hasSourceImage(input: GenerateInput) {
   return Boolean(input.sourceImageBuffer && input.sourceImageContentType);
 }
@@ -271,10 +290,10 @@ async function generateWithStability(input: GenerateInput, endpointUrl: string, 
       };
     }
 
-    const payload = (await response.json()) as {
+    const payload = await readProviderJson<{
       image?: string;
       artifacts?: Array<{ base64?: string; seed?: number }>;
-    };
+    }>(response, "Stability v2");
 
     if (payload.image) {
       return {
@@ -317,9 +336,9 @@ async function generateWithStability(input: GenerateInput, endpointUrl: string, 
     throw new Error(`Stability request failed: ${response.status}`);
   }
 
-  const payload = (await response.json()) as {
+  const payload = await readProviderJson<{
     artifacts?: Array<{ base64?: string; seed?: number; finishReason?: string }>;
-  };
+  }>(response, "Stability");
   const artifact = payload.artifacts?.[0];
   if (!artifact?.base64) {
     throw new Error("Stability did not return base64 image data");
@@ -347,11 +366,11 @@ async function pollReplicate(getUrl: string, apiKey: string) {
         Authorization: `Bearer ${apiKey}`,
       },
     });
-    const payload = (await response.json()) as {
+    const payload = await readProviderJson<{
       status?: string;
       output?: string | string[];
       error?: string;
-    };
+    }>(response, "Replicate polling");
 
     if (payload.status === "succeeded") {
       const output = Array.isArray(payload.output) ? payload.output[0] : payload.output;
@@ -388,10 +407,10 @@ async function generateWithReplicate(input: GenerateInput, endpointUrl: string, 
     throw new Error(`Replicate request failed: ${response.status}`);
   }
 
-  const payload = (await response.json()) as {
+  const payload = await readProviderJson<{
     output?: string | string[];
     urls?: { get?: string };
-  };
+  }>(response, "Replicate");
 
   const immediateOutput = Array.isArray(payload.output) ? payload.output[0] : payload.output;
   const imageUrl = immediateOutput || (payload.urls?.get ? await pollReplicate(payload.urls.get, apiKey) : null);
@@ -431,11 +450,11 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
     throw new Error(`fal.ai request failed: ${response.status} ${errorText}`);
   }
 
-  const payload = (await response.json()) as {
+  const payload = await readProviderJson<{
     images?: Array<{ url?: string }>;
     request_id?: string;
     status?: string;
-  };
+  }>(response, "fal.ai");
 
   // Synchronous response 鈥?images returned directly
   if (payload.images?.[0]?.url) {
@@ -460,10 +479,10 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
       headers: { Authorization: `Key ${apiKey}` },
     });
 
-    const statusPayload = (await statusResp.json()) as {
+    const statusPayload = await readProviderJson<{
       status?: string;
       output?: { images?: Array<{ url?: string }> };
-    };
+    }>(statusResp, "fal.ai polling");
 
     if (statusPayload.status === "COMPLETED" && statusPayload.output?.images?.[0]?.url) {
       return normalizeRemoteImage({
@@ -684,13 +703,13 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       throw error;
     }
 
-    const payload = (await response.json()) as {
+    const payload = await readProviderJson<{
       data?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
       imageUrl?: string;
       imageBase64?: string;
       mimeType?: string;
       metadata?: Record<string, unknown>;
-    };
+    }>(response, "Custom image edit API");
 
     const openAIStyleImage = payload.data?.[0];
     if (openAIStyleImage?.b64_json) {
@@ -789,13 +808,13 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       throw error;
     }
 
-    const payload = (await response.json()) as {
+    const payload = await readProviderJson<{
       choices?: Array<{
         message?: {
           content?: string | Array<{ type?: string; image_url?: { url?: string }; text?: string }>;
         };
       }>;
-    };
+    }>(response, "Custom chat image API");
 
     const content = payload.choices?.[0]?.message?.content;
     if (Array.isArray(content)) {
@@ -955,7 +974,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     throw error;
   }
 
-  const payload = (await response.json()) as {
+  const payload = await readProviderJson<{
     created?: number;
     data?: Array<{
       url?: string;
@@ -966,7 +985,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     imageBase64?: string;
     mimeType?: string;
     metadata?: Record<string, unknown>;
-  };
+  }>(response, "Custom API");
 
   const openAIStyleImage = payload.data?.[0];
   if (openAIStyleImage?.b64_json) {
