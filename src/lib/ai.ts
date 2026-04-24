@@ -58,6 +58,20 @@ function ensureImageAwareAdapter(adapter: ModelAdapter, label: string, input: Ge
   );
 }
 
+function resolveUpstreamModelName(input: {
+  adapter?: ModelAdapter;
+  modelCode: string;
+  modelDisplayName?: string | null;
+  optionModelName?: string | null;
+  legacyModelName?: string | null;
+}) {
+  if (input.adapter === "custom" || input.adapter === "openai-chat-image" || input.adapter === "openai-images" || input.adapter === "openai-edit") {
+    return input.modelCode;
+  }
+
+  return input.modelDisplayName || input.legacyModelName || input.optionModelName || input.modelCode;
+}
+
 async function resolveProvider(modelKey: string) {
   const connection = await getConnectionById(modelKey);
   if (connection) {
@@ -73,6 +87,13 @@ async function resolveProvider(modelKey: string) {
         ? await getProviderConfigByKey(connection.modelCode)
         : null;
     const savedAdapter = connection.adapter as ModelAdapter | undefined;
+    const upstreamModelName = resolveUpstreamModelName({
+      adapter: savedAdapter,
+      modelCode: connection.modelCode,
+      modelDisplayName: connection.modelDisplayName,
+      optionModelName: option?.modelName,
+      legacyModelName: legacyProvider?.modelName,
+    });
 
     return {
       option: {
@@ -83,7 +104,7 @@ async function resolveProvider(modelKey: string) {
           description: "Runtime model loaded from the active route connection.",
           adapter: savedAdapter || "custom",
           provider: connection.legacyProviderId || "Custom",
-          modelName: connection.modelDisplayName || connection.modelCode,
+          modelName: upstreamModelName,
           defaultEndpoint: endpointUrl,
           docsHint: "",
           supportsImageTest: true,
@@ -91,14 +112,14 @@ async function resolveProvider(modelKey: string) {
         }),
         adapter: savedAdapter || option?.adapter || "custom",
         provider: connection.legacyProviderId || option?.provider || "Custom",
-        modelName: connection.modelDisplayName || option?.modelName || connection.modelCode,
+        modelName: upstreamModelName,
         defaultEndpoint: endpointUrl || option?.defaultEndpoint || "",
       },
       provider: legacyProvider,
       endpointUrl: endpointUrl || (legacyProvider as Record<string, unknown> | null)?.fullEndpoint as string | undefined || legacyProvider?.webhookUrl || "",
       apiKey: exposed.secret || legacyProvider?.apiKey || null,
       baseUrl: connection.baseUrl || legacyProvider?.baseUrl || undefined,
-      modelName: connection.modelDisplayName || legacyProvider?.modelName || option?.modelName || connection.modelCode,
+      modelName: upstreamModelName,
     };
   }
 

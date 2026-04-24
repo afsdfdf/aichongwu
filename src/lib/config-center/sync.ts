@@ -42,7 +42,7 @@ export async function syncConnectionToBucket(connection: ConnectionRecord): Prom
     models: [
       {
         id: connection.modelCode,
-        modelName: connection.modelDisplayName,
+        modelName: connection.modelCode,
         endpoint: connection.endpointPath || connection.submitUrl || null,
         isEnabled: connection.enabled,
         priority: connection.priority,
