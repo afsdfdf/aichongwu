@@ -9,7 +9,6 @@ import {
   savePromptTemplateWithVersion,
   saveRoutePolicy,
 } from "@/lib/config-center/service";
-import { invalidateRedisCache } from "@/lib/redis-cache";
 
 export const runtime = "nodejs";
 
@@ -59,7 +58,6 @@ export async function POST(request: Request) {
         id: connection.id,
         enabled: Boolean(body.enabled),
       });
-      await invalidateRedisCache();
     }
 
     return NextResponse.json({ ok: true, message: `${modelId} 已${body.enabled ? "启用" : "停用"}` });
@@ -77,7 +75,6 @@ export async function POST(request: Request) {
       enabled: true,
       primaryConnectionId: modelId,
     });
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: `${modelId} 已设为默认路由模型` });
   }
 
@@ -86,7 +83,6 @@ export async function POST(request: Request) {
     if (!modelId) return NextResponse.json({ message: "缺少 modelId" }, { status: 400 });
 
     await removeConnection(modelId);
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: `${modelId} 已移除` });
   }
 
@@ -100,7 +96,6 @@ export async function POST(request: Request) {
         id: connection.id,
         priority: Math.max(1, Number(body.priority || 1)),
       });
-      await invalidateRedisCache();
     }
 
     return NextResponse.json({ ok: true, message: `${modelId} 优先级已更新` });
@@ -137,7 +132,6 @@ export async function POST(request: Request) {
       primaryConnectionId: modelId,
     });
 
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: `${modelId} 已添加并设为默认路由模型` });
   }
 
@@ -156,7 +150,6 @@ export async function POST(request: Request) {
       aspectRatio: aspectRatio || null,
       publish: isActive !== false,
     });
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: `提示词“${displayName}”已保存` });
   }
 
@@ -186,7 +179,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "缺少 promptId" }, { status: 400 });
     }
     await removePromptTemplate(promptId);
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: "提示词已删除" });
   }
 
@@ -213,7 +205,6 @@ export async function POST(request: Request) {
       aspectRatio: body.aspectRatio !== undefined ? (body.aspectRatio as string | null) : version.aspectRatio,
       publish: body.isActive !== undefined ? Boolean(body.isActive) : template.status === "published",
     });
-    await invalidateRedisCache();
     return NextResponse.json({ ok: true, message: "提示词已更新" });
   }
 

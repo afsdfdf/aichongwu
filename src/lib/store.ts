@@ -15,11 +15,6 @@ import {
   uploadBufferToS3,
 } from "@/lib/s3";
 import { getDefaultShopDomain, slugifyProductType } from "@/lib/utils";
-import {
-  getRedisCache,
-  setRedisCache,
-  invalidateRedisCache,
-} from "@/lib/redis-cache";
 import type {
   AppState,
   PromptRecord,
@@ -48,6 +43,9 @@ type S3ObjectLite = {
   size: number;
   lastModified: string | null;
 };
+
+const STATE_MEMORY_CACHE_TTL_MS = 30_000;
+let stateMemoryCache: { state: AppState; expiresAt: number } | null = null;
 
 function nowIso() {
   return new Date().toISOString();
@@ -177,8 +175,9 @@ function migrateV2ToV3(state: AppState): AppState {
 // 鈹€鈹€ S3 Read / Write 鈹€鈹€
 
 async function readStateFromS3(): Promise<AppState> {
-  const cached = await getRedisCache();
-  if (cached) return migrateV2ToV3(cached);
+  if (stateMemoryCache && stateMemoryCache.expiresAt > Date.now()) {
+    return migrateV2ToV3(stateMemoryCache.state);
+  }
 
   const client = getS3Client();
 
@@ -199,14 +198,16 @@ async function readStateFromS3(): Promise<AppState> {
       ...createEmptyState(),
       ...parsed,
     });
-    await setRedisCache(state);
+    stateMemoryCache = { state, expiresAt: Date.now() + STATE_MEMORY_CACHE_TTL_MS };
     return state;
   } catch (error) {
     if (
       error instanceof NoSuchKey ||
       (error instanceof Error && "name" in error && error.name === "NoSuchKey")
     ) {
-      return createEmptyState();
+      const state = createEmptyState();
+      stateMemoryCache = { state, expiresAt: Date.now() + STATE_MEMORY_CACHE_TTL_MS };
+      return state;
     }
     throw error;
   }
@@ -222,7 +223,7 @@ async function writeStateToS3(state: AppState) {
       ContentType: "application/json; charset=utf-8",
     }),
   );
-  await setRedisCache(state);
+  stateMemoryCache = { state: { ...state, updatedAt: nowIso() }, expiresAt: Date.now() + STATE_MEMORY_CACHE_TTL_MS };
 }
 
 // 鈹€鈹€ Write mutex 鈹€鈹€
@@ -1004,9 +1005,9 @@ export function getS3Summary() {
   };
 }
 
-/** Force-refresh: clear Redis, pull fresh from S3, update Redis. Called by Vercel Cron. */
+/** Force-refresh: clear the in-memory cache and pull fresh state from S3. Called by Vercel Cron. */
 export async function forceRefreshCache() {
-  await invalidateRedisCache();
+  stateMemoryCache = null;
   const fresh = await readStateFromS3();
   return fresh;
 }
