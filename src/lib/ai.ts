@@ -916,11 +916,6 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     return requestImagesEdit(endpointUrl);
   }
 
-  const promptWithSourceUrl =
-    sourceProvided && input.sourceImageUrl
-      ? `${input.prompt}\n\nUse this uploaded customer image as the visual reference: ${input.sourceImageUrl}`
-      : input.prompt;
-
   if (isOpenAICompatibleChatApi) {
     try {
       return await requestChatCompletionsImage({ endpoint: endpointUrl, sourceMode: "base64" });
@@ -938,11 +933,13 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
   }
 
   if (sourceProvided && input.sourceImageUrl && isOpenAICompatibleImagesApi) {
+    const fallbackErrors: string[] = [];
     const editsEndpoint = editsEndpointFromImagesEndpoint();
     if (editsEndpoint) {
       try {
-        return await requestImagesEdit(editsEndpoint, true, 15_000);
+        return await requestImagesEdit(editsEndpoint, true, 120_000);
       } catch (error) {
+        fallbackErrors.push(`edits: ${error instanceof Error ? error.message : String(error)}`);
         console.warn(
           "[custom-images-fallback] edits fallback failed, trying chat image_url fallback:",
           error instanceof Error ? error.message : error,
@@ -957,21 +954,28 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
           endpoint: chatEndpoint,
           sourceMode: "url",
           fallbackFromImagesEndpoint: true,
-          timeoutMs: 15_000,
+          timeoutMs: 120_000,
         });
       } catch (error) {
+        fallbackErrors.push(`chat image_url: ${error instanceof Error ? error.message : String(error)}`);
         console.warn(
-          "[custom-images-fallback] chat image_url fallback failed, using prompt URL fallback:",
+          "[custom-images-fallback] chat image_url fallback failed:",
           error instanceof Error ? error.message : error,
         );
       }
     }
+
+    const error = new Error(
+      `Image-to-image generation requires forwarding the uploaded image to the provider, but all image-input paths failed. ${fallbackErrors.join(" | ")}`,
+    );
+    Object.assign(error, { status: 502 });
+    throw error;
   }
 
   const requestBody = isOpenAICompatibleImagesApi
     ? {
         model: modelName,
-        prompt: promptWithSourceUrl,
+        prompt: input.prompt,
         n: 1,
         size,
       }
@@ -1023,8 +1027,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
-        sourceImageForwarded: Boolean(sourceProvided && input.sourceImageUrl),
-        sourceImageFallback: sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
+        sourceImageForwarded: false,
+        sourceImageFallback: null,
       },
     };
   }
@@ -1036,8 +1040,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
         ...(payload.metadata ?? {}),
         revisedPrompt: openAIStyleImage.revised_prompt ?? null,
         provider: "custom-openai-compatible",
-        sourceImageForwarded: Boolean(sourceProvided && input.sourceImageUrl),
-        sourceImageFallback: sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
+        sourceImageForwarded: false,
+        sourceImageFallback: null,
       },
     });
   }
@@ -1049,10 +1053,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       metadata: {
         ...(payload.metadata ?? {}),
         provider: "custom-openai-compatible",
-        sourceImageForwarded: isOpenAICompatibleImagesApi
-          ? Boolean(sourceProvided && input.sourceImageUrl)
-          : sourceProvided,
-        sourceImageFallback: isOpenAICompatibleImagesApi && sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
+        sourceImageForwarded: isOpenAICompatibleImagesApi ? false : sourceProvided,
+        sourceImageFallback: null,
       },
     };
   }
@@ -1062,10 +1064,8 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     metadata: {
       ...(payload.metadata ?? {}),
       provider: "custom-openai-compatible",
-      sourceImageForwarded: isOpenAICompatibleImagesApi
-        ? Boolean(sourceProvided && input.sourceImageUrl)
-        : sourceProvided,
-      sourceImageFallback: isOpenAICompatibleImagesApi && sourceProvided && input.sourceImageUrl ? "url-in-prompt" : null,
+      sourceImageForwarded: isOpenAICompatibleImagesApi ? false : sourceProvided,
+      sourceImageFallback: null,
     },
   });
 }
