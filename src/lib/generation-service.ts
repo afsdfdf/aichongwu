@@ -94,7 +94,10 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
     negativePrompt: runtime.prompt.version.negativePrompt,
   });
 
-  const modelKey = runtime.route?.primary.modelCode || legacyStore.setting.activeModel;
+  const modelKey = legacyStore.setting.activeModel || runtime.route?.primary.modelCode;
+  if (!modelKey) {
+    throw new Error("No active model configured. Please save a model in the admin settings first.");
+  }
 
   const generated = await generatePreviewImage({
     modelKey,
