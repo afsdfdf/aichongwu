@@ -129,7 +129,7 @@ export async function runSynchronousGeneration(input: NormalizedGenerationInput)
     metadata: {
       ...(generated.metadata ?? {}),
       routePolicyId: runtime.route?.route.id ?? null,
-      connectionId: runtime.route?.primary.id ?? null,
+      connectionId: `${legacyStore.setting.modelProvider}:${modelKey}`,
       promptTemplateId: runtime.prompt.template.id,
       promptVersion: runtime.prompt.version.version,
       requestMode: input.mode,

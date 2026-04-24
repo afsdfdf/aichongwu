@@ -66,6 +66,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Image test failed";
+    console.error("[providers/test-image]", message);
     const status =
       typeof error === "object" &&
       error !== null &&

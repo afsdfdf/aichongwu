@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/auth";
 import { testConnection } from "@/lib/config-center/service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    if (!(await getAdminSession())) {
+      return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const id = String(body?.id || "").trim();
     if (!id) {

@@ -45,22 +45,29 @@ async function resolveProvider(modelKey: string) {
     throw new Error(`Unknown model: ${modelKey}`);
   }
 
-  const fallbackAdapter = (provider?.adapter as ModelAdapter | undefined) || "custom";
-  const resolvedOption =
-    option ||
-    {
+  const savedAdapter = provider?.adapter as ModelAdapter | undefined;
+  const resolvedOption = {
+    ...(option || {
       key: modelKey,
       formKey: modelKey,
       label: provider?.label || modelKey,
       description: "Runtime model loaded from the active saved configuration.",
-      adapter: fallbackAdapter,
+      adapter: savedAdapter || "custom",
       provider: provider?.providerId || "Custom",
       modelName: provider?.modelName || modelKey,
       defaultEndpoint: provider?.webhookUrl || "",
       docsHint: "",
       supportsImageTest: true,
       supportsPreviewGeneration: true,
-    };
+    }),
+    adapter: savedAdapter || option?.adapter || "custom",
+    provider: provider?.providerId || option?.provider || "Custom",
+    modelName: provider?.modelName || option?.modelName || modelKey,
+    defaultEndpoint: (provider as Record<string, unknown> | null)?.fullEndpoint as string | undefined
+      || provider?.webhookUrl
+      || option?.defaultEndpoint
+      || "",
+  };
 
   // v3 returns fullEndpoint (base + path combined), prefer it over webhookUrl
   const endpointUrl = (provider as Record<string, unknown> | null)?.fullEndpoint as string | undefined
@@ -697,7 +704,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       },
       body: JSON.stringify({
         model: modelName,
-        messages: [{ role: "user", content: messageContent }],
+        messages: [{ role: "user", content: messageContent.length === 1 ? input.prompt : messageContent }],
         max_tokens: 1024,
       }),
     });
@@ -732,6 +739,21 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     }
 
     if (typeof content === "string") {
+      const base64Match = content.match(
+        /!\[.*?\]\(data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)\)/,
+      ) || content.match(/^data:(image\/[a-zA-Z+.-]+);base64,([A-Za-z0-9+/=]+)$/);
+      if (base64Match) {
+        const [, contentType, base64Data] = base64Match;
+        return {
+          outputBuffer: Buffer.from(base64Data, "base64"),
+          contentType,
+          metadata: {
+            provider: "custom-openai-compatible-chat",
+            sourceImageForwarded: sourceProvided,
+          },
+        };
+      }
+
       const urlMatch = content.match(/https?:\/\/\S+/);
       if (urlMatch?.[0]) {
         return normalizeRemoteImage({
@@ -744,7 +766,7 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
       }
     }
 
-    throw new Error("Chat completions response did not contain an image URL.");
+    throw new Error("Chat completions response did not contain a recognizable image.");
   }
 
   const requestBody = isOpenAICompatibleImagesApi

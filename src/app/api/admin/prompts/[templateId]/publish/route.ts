@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/auth";
 import { savePromptTemplateWithVersion } from "@/lib/config-center/service";
 
 export const runtime = "nodejs";
@@ -8,6 +9,10 @@ export async function POST(
   context: { params: Promise<{ templateId: string }> },
 ) {
   try {
+    if (!(await getAdminSession())) {
+      return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const params = await context.params;
     const body = await request.json();
     const prompt = await savePromptTemplateWithVersion({

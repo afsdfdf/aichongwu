@@ -30,6 +30,35 @@ import type {
   SystemSetting,
 } from "@/lib/config-center/types";
 
+function redactConnectionSecret(connection: ConnectionRecord) {
+  const hasSecret = Boolean(connection.encryptedSecret) || connection.metadata?.hasLegacySecret === true;
+
+  return {
+    id: connection.id,
+    name: connection.name,
+    providerKind: connection.providerKind,
+    legacyProviderId: connection.legacyProviderId,
+    enabled: connection.enabled,
+    priority: connection.priority,
+    authScheme: connection.authScheme,
+    baseUrl: connection.baseUrl,
+    submitUrl: connection.submitUrl,
+    statusUrlTemplate: connection.statusUrlTemplate,
+    modelCode: connection.modelCode,
+    modelDisplayName: connection.modelDisplayName,
+    adapter: connection.adapter,
+    operationMode: connection.operationMode,
+    endpointPath: connection.endpointPath,
+    customHeaders: connection.customHeaders,
+    createdAt: connection.createdAt,
+    updatedAt: connection.updatedAt,
+    metadata: {
+      ...(connection.metadata ?? {}),
+      hasLegacySecret: hasSecret,
+    },
+  };
+}
+
 export async function getAdminBootstrap() {
   const [settings, connections, routes, templates, bindings] = await Promise.all([
     getEffectiveSystemSetting(),
@@ -41,7 +70,7 @@ export async function getAdminBootstrap() {
 
   return {
     settings,
-    connections: connections.map(exposeSecret),
+    connections: connections.map(redactConnectionSecret),
     routes,
     templates,
     bindings,
@@ -59,7 +88,7 @@ export async function saveSystemSettings(input: Partial<SystemSetting>) {
 export async function saveConnection(input: Partial<ConnectionRecord> & { secret?: string | null }) {
   const next = await upsertConnection(input);
   await syncConnectionToBucket(next);
-  return exposeSecret(next);
+  return redactConnectionSecret(next);
 }
 
 export async function removeConnection(id: string) {
