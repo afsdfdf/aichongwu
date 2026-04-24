@@ -1,0 +1,1 @@
+{"model":"grok-imagine-image","messages":[{"role":"user","content":[{"type":"text","text":"Use this image as the source subject and generate a clean memorial-style preview. Return the generated image."},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8XQAAAAASUVORK5CYII="}}]}],"max_tokens":1024}

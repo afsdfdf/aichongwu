@@ -1,0 +1,1 @@
+{"model":"grok-imagine-image","messages":[{"role":"user","content":"Use this image URL as the source subject and generate a memorial-style preview: https://memorymint-assets-01.s3.us-west-1.amazonaws.com/generated/f5be7d94-2a51-4165-8a58-99ab519d29c5.jpg"}],"max_tokens":1024}

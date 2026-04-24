@@ -1,0 +1,1 @@
+{"error":{"message":"model gpt-image-2 is only supported on /v1/images/generations and /v1/images/edits","type":"server_error","param":"","code":"internal_server_error"}}
