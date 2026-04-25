@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const record = await getGenerationRecordById(generationId);
+    const record = await getGenerationRecordById(generationId, undefined, { forceFresh: true });
 
     if (!record) {
       return json({ status: "failed", error: "Task not found" }, 404);

@@ -174,8 +174,8 @@ function migrateV2ToV3(state: AppState): AppState {
 
 // 鈹€鈹€ S3 Read / Write 鈹€鈹€
 
-async function readStateFromS3(): Promise<AppState> {
-  if (stateMemoryCache && stateMemoryCache.expiresAt > Date.now()) {
+async function readStateFromS3(options: { forceFresh?: boolean } = {}): Promise<AppState> {
+  if (!options.forceFresh && stateMemoryCache && stateMemoryCache.expiresAt > Date.now()) {
     return migrateV2ToV3(stateMemoryCache.state);
   }
 
@@ -759,8 +759,12 @@ export async function listGenerationRecords(shopDomain: string) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export async function getGenerationRecordById(generationId: string, shopDomain?: string) {
-  const state = await readStateFromS3();
+export async function getGenerationRecordById(
+  generationId: string,
+  shopDomain?: string,
+  options: { forceFresh?: boolean } = {},
+) {
+  const state = await readStateFromS3(options);
   return (
     state.generations.find(
       (item) => item.id === generationId && (!shopDomain || item.shopDomain === shopDomain),
