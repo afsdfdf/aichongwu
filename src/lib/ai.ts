@@ -754,9 +754,14 @@ async function generateWithOpenAIChatImage(
   );
 }
 
-async function generateWithCustom(input: GenerateInput, endpointUrl: string, apiKey?: string | null) {
+async function generateWithCustom(
+  input: GenerateInput,
+  endpointUrl: string,
+  apiKey?: string | null,
+  resolvedModelName?: string,
+) {
   const provider = await getProviderConfigByKey(input.modelKey);
-  const modelName = provider?.modelName || input.modelKey;
+  const modelName = resolvedModelName || provider?.modelName || input.modelKey;
   const sourceProvided = hasSourceImage(input);
   const size = mapAspectRatioToSize(input.aspectRatio);
   const isOpenAICompatibleEditsApi =
@@ -1001,6 +1006,130 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
     throw new Error("Chat completions response did not contain a recognizable image.");
   }
 
+  async function requestGeminiContentsImage(endpoint: string, timeoutMs?: number) {
+    const parts: Array<Record<string, unknown>> = [{ text: input.prompt }];
+
+    if (sourceProvided) {
+      parts.push({
+        inlineData: {
+          mimeType: input.sourceImageContentType || "image/png",
+          data: sourceImageBase64(input),
+        },
+      });
+    } else if (input.sourceImageUrl) {
+      parts.push({
+        fileData: {
+          mimeType: input.sourceImageContentType || "image/png",
+          fileUri: input.sourceImageUrl,
+        },
+      });
+    }
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: modelName,
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      }),
+      signal: timeoutSignal(timeoutMs),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      const error = new Error(text || `Custom Gemini contents request failed: ${response.status}`);
+      Object.assign(error, { status: response.status });
+      throw error;
+    }
+
+    const payload = await readProviderJson<{
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{
+            inlineData?: { data?: string; mimeType?: string };
+            inline_data?: { data?: string; mime_type?: string };
+          }>;
+        };
+      }>;
+      data?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
+      imageUrl?: string;
+      imageBase64?: string;
+      mimeType?: string;
+      metadata?: Record<string, unknown>;
+    }>(response, "Custom Gemini contents API");
+
+    const inlineData = getGeminiInlineImage(payload);
+    if (inlineData?.data) {
+      return {
+        outputBuffer: Buffer.from(inlineData.data, "base64"),
+        contentType: inlineData.mimeType,
+        metadata: {
+          ...(payload.metadata ?? {}),
+          provider: "custom-gemini-contents",
+          sourceImageForwarded: sourceProvided,
+          sourceImageFallback: "contents",
+        },
+      };
+    }
+
+    const openAIStyleImage = payload.data?.[0];
+    if (openAIStyleImage?.b64_json) {
+      return {
+        outputBuffer: Buffer.from(openAIStyleImage.b64_json, "base64"),
+        contentType: "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-gemini-contents",
+          sourceImageForwarded: sourceProvided,
+          sourceImageFallback: "contents",
+        },
+      };
+    }
+
+    if (openAIStyleImage?.url) {
+      return normalizeRemoteImage({
+        imageUrl: openAIStyleImage.url,
+        metadata: {
+          ...(payload.metadata ?? {}),
+          revisedPrompt: openAIStyleImage.revised_prompt ?? null,
+          provider: "custom-gemini-contents",
+          sourceImageForwarded: sourceProvided,
+          sourceImageFallback: "contents",
+        },
+      });
+    }
+
+    if (payload.imageBase64) {
+      return {
+        outputBuffer: Buffer.from(payload.imageBase64, "base64"),
+        contentType: payload.mimeType || "image/png",
+        metadata: {
+          ...(payload.metadata ?? {}),
+          provider: "custom-gemini-contents",
+          sourceImageForwarded: sourceProvided,
+          sourceImageFallback: "contents",
+        },
+      };
+    }
+
+    return normalizeRemoteImage({
+      imageUrl: payload.imageUrl,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        provider: "custom-gemini-contents",
+        sourceImageForwarded: sourceProvided,
+        sourceImageFallback: "contents",
+      },
+    });
+  }
+
   if (!sourceProvided && isOpenAICompatibleEditsApi) {
     const error = new Error("The configured endpoint uses /images/edits and requires a source image.");
     Object.assign(error, { status: 400 });
@@ -1029,6 +1158,18 @@ async function generateWithCustom(input: GenerateInput, endpointUrl: string, api
 
   if (sourceProvided && input.sourceImageUrl && isOpenAICompatibleImagesApi) {
     const fallbackErrors: string[] = [];
+    if (modelName.toLowerCase().includes("gemini")) {
+      try {
+        return await requestGeminiContentsImage(endpointUrl, 120_000);
+      } catch (error) {
+        fallbackErrors.push(`contents: ${error instanceof Error ? error.message : String(error)}`);
+        console.warn(
+          "[custom-images-fallback] Gemini contents request failed, trying edits fallback:",
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
     const editsEndpoint = editsEndpointFromImagesEndpoint();
     if (editsEndpoint) {
       try {
@@ -1209,7 +1350,7 @@ async function runProviderImageGeneration(input: GenerateInput) {
       return generateWithGemini(input, ensureConfigured(modelName, "Gemini model"), key);
     }
     case "custom":
-      return generateWithCustom(input, ensureConfigured(endpointUrl, "Custom API endpoint"), apiKey);
+      return generateWithCustom(input, ensureConfigured(endpointUrl, "Custom API endpoint"), apiKey, modelName);
     case "midjourney-async":
     case "dashscope-async":
     case "volcengine-async":
