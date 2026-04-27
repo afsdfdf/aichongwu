@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "@/lib/auth";
-import { removePromptTemplate, savePromptTemplateWithVersion } from "@/lib/config-center/service";
+import {
+  removePromptTemplate,
+  saveConnection,
+  savePromptTemplateWithVersion,
+  saveRoutePolicy,
+} from "@/lib/config-center/service";
 import {
   getStoreContext,
   importExistingBucketAssets,
@@ -91,6 +96,34 @@ export async function saveStoreSettingAction(
       : "custom";
   const widgetAccentColor = String(formData.get("widgetAccentColor") || setting.widgetAccentColor || "#2563eb");
   const widgetButtonText = String(formData.get("widgetButtonText") || setting.widgetButtonText || "Upload Your Pet Photo");
+
+  const connectionId = `${providerId}:${activeModel}`;
+
+  await saveConnection({
+    id: connectionId,
+    name: `${providerId} / ${activeModel}`,
+    legacyProviderId: providerId,
+    modelCode: activeModel,
+    modelDisplayName: modelName,
+    adapter: modelAdapter,
+    endpointPath: modelEndpoint || null,
+    baseUrl: baseUrl || null,
+    secret: apiKey.trim() || undefined,
+    enabled: true,
+    priority: 1,
+  });
+
+  for (const scene of ["generate", "process", "admin_test"] as const) {
+    await saveRoutePolicy({
+      id: `${scene}:*`,
+      name: `Default ${scene} Route`,
+      scene,
+      productType: "*",
+      enabled: true,
+      primaryConnectionId: connectionId,
+      fallbackConnectionIds: [],
+    });
+  }
 
   await saveStoreSettingRecord({
     shopDomain: getDefaultShopDomain(),
