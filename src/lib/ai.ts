@@ -65,11 +65,17 @@ function resolveUpstreamModelName(input: {
   optionModelName?: string | null;
   legacyModelName?: string | null;
 }) {
+  const modelCode = stripConnectionPrefix(input.modelCode);
+
   if (input.adapter === "custom" || input.adapter === "openai-chat-image" || input.adapter === "openai-images" || input.adapter === "openai-edit") {
-    return input.modelCode;
+    return modelCode;
   }
 
-  return input.modelDisplayName || input.legacyModelName || input.optionModelName || input.modelCode;
+  return stripConnectionPrefix(input.modelDisplayName || input.legacyModelName || input.optionModelName || modelCode);
+}
+
+function stripConnectionPrefix(modelKey: string) {
+  return modelKey.replace(/^(google|custom|openai):(.+)$/i, "$2");
 }
 
 async function resolveProvider(modelKey: string) {
@@ -77,7 +83,6 @@ async function resolveProvider(modelKey: string) {
   if (connection) {
     const exposed = exposeSecret(connection);
     const option = getModelOption(connection.modelCode);
-    const baseUrl = connection.baseUrl || option?.defaultEndpoint?.replace(/\/[^/]+$/, "") || undefined;
     const endpointPath = connection.submitUrl || connection.endpointPath || option?.defaultEndpoint || "";
     const endpointUrl = endpointPath.startsWith("http")
       ? endpointPath
