@@ -68,10 +68,10 @@ function inferModelEndpoint(origin: string, modelId: string, supportedTypes?: st
 
   if (types.includes("gemini") || lower.includes("gemini")) {
     return {
-      adapter: "gemini",
-      endpoint: `${origin}/v1beta/models/${modelId}:generateContent`,
-      providerId: "google",
-      protocol: "gemini" as const,
+      adapter: "openai-chat-image",
+      endpoint: `${origin}/v1/chat/completions`,
+      providerId: "custom",
+      protocol: "openai" as const,
       type: "image" as const,
     };
   }
@@ -192,10 +192,7 @@ export async function POST(request: Request) {
     });
 
     const imageModels = models.filter((model) => model.type !== "other");
-    const suggestedProviderId =
-      imageModels.find((item) => item.protocol === "gemini")?.providerId ||
-      imageModels[0]?.providerId ||
-      "openai";
+    const suggestedProviderId = imageModels[0]?.providerId || "custom";
 
     return NextResponse.json({
       ok: true,

@@ -528,6 +528,43 @@ async function generateWithFalQueue(input: GenerateInput, endpointUrl: string, a
   throw new Error("fal.ai polling timed out (50s). Check your fal.ai dashboard for the result.");
 }
 
+function isOfficialGoogleGeminiEndpoint(endpointUrl: string | null | undefined) {
+  if (!endpointUrl) return true;
+  try {
+    return new URL(endpointUrl).hostname.endsWith("generativelanguage.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function getGeminiInlineImage(payload: {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        inlineData?: { data?: string; mimeType?: string };
+        inline_data?: { data?: string; mime_type?: string };
+      }>;
+    };
+  }>;
+}) {
+  const parts = payload.candidates?.[0]?.content?.parts ?? [];
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      return {
+        data: part.inlineData.data,
+        mimeType: part.inlineData.mimeType || "image/png",
+      };
+    }
+    if (part.inline_data?.data) {
+      return {
+        data: part.inline_data.data,
+        mimeType: part.inline_data.mime_type || "image/png",
+      };
+    }
+  }
+  return null;
+}
+
 async function generateWithGemini(input: GenerateInput, modelName: string, apiKey: string) {
   const ai = new GoogleGenAI({ apiKey });
   const contents: Array<Record<string, unknown>> = [{ text: input.prompt }];
@@ -562,6 +599,64 @@ async function generateWithGemini(input: GenerateInput, modelName: string, apiKe
       provider: "gemini",
       sourceImageForwarded: hasSourceImage(input),
       endpointMode: "google-sdk",
+    },
+  };
+}
+
+async function generateWithGeminiRest(input: GenerateInput, endpointUrl: string, apiKey: string) {
+  const parts: Array<Record<string, unknown>> = [{ text: input.prompt }];
+
+  if (hasSourceImage(input)) {
+    parts.push({
+      inlineData: {
+        mimeType: input.sourceImageContentType || "image/png",
+        data: sourceImageBase64(input),
+      },
+    });
+  }
+
+  const response = await fetch(endpointUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Gemini compatible REST request failed: ${response.status} ${text.slice(0, 500)}`);
+  }
+
+  const payload = await readProviderJson<{
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{
+          inlineData?: { data?: string; mimeType?: string };
+          inline_data?: { data?: string; mime_type?: string };
+        }>;
+      };
+    }>;
+  }>(response, "Gemini compatible REST");
+  const inlineData = getGeminiInlineImage(payload);
+  if (!inlineData?.data) {
+    throw new Error("Gemini compatible REST endpoint did not return inline image data");
+  }
+
+  return {
+    outputBuffer: Buffer.from(inlineData.data, "base64"),
+    contentType: inlineData.mimeType,
+    metadata: {
+      provider: "gemini-compatible-rest",
+      sourceImageForwarded: hasSourceImage(input),
+      endpointMode: "gemini-rest",
     },
   };
 }
@@ -1106,8 +1201,13 @@ async function runProviderImageGeneration(input: GenerateInput) {
       return generateWithStability(input, ensureConfigured(endpointUrl, "Stability endpoint"), ensureConfigured(apiKey, "Stability API Key"));
     case "replicate":
       return generateWithReplicate(input, ensureConfigured(endpointUrl, "Replicate endpoint"), ensureConfigured(apiKey, "Replicate API Token"));
-    case "gemini":
-      return generateWithGemini(input, ensureConfigured(modelName, "Gemini model"), ensureConfigured(apiKey, "Google API Key"));
+    case "gemini": {
+      const key = ensureConfigured(apiKey, "Google API Key");
+      if (!isOfficialGoogleGeminiEndpoint(endpointUrl)) {
+        return generateWithGeminiRest(input, ensureConfigured(endpointUrl, "Gemini compatible endpoint"), key);
+      }
+      return generateWithGemini(input, ensureConfigured(modelName, "Gemini model"), key);
+    }
     case "custom":
       return generateWithCustom(input, ensureConfigured(endpointUrl, "Custom API endpoint"), apiKey);
     case "midjourney-async":
