@@ -68,7 +68,7 @@ export function ModelSettingsForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          modelKey: defaults.activeModel,
+          modelKey: `${providerId}:${defaults.activeModel}`,
           prompt,
           sourceImage: sourceImage || undefined,
         }),
